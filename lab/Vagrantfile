@@ -1,0 +1,235 @@
+# =============================================================================
+# LAB — Mini Active Directory Testing Environment
+# 3 VMs: DC01 | SRV01 (MSSQL) | WS01 (Win10)
+#
+# LAB USE ONLY — intentionally misconfigured for pentest training.
+# NEVER deploy these scripts on a real network.
+#
+# Requirements:
+#   - VirtualBox  https://www.virtualbox.org/
+#   - Vagrant     https://www.vagrantup.com/
+#   - Vagrant 2.2.0+ (for reboot: true support on provisioners)
+#
+# First run downloads ~8GB of Windows Vagrant boxes (cached after first pull).
+#
+# Usage:
+#   vagrant up              # bring up all three VMs
+#   vagrant up dc01         # bring up only the DC
+#   vagrant halt            # shut down all VMs
+#   vagrant destroy -f      # wipe everything
+#   vagrant snapshot save clean_lab  # snapshot after first successful provision
+#
+# Lab Network: 192.168.56.0/24 (VirtualBox host-only)
+#   DC01:  192.168.56.10   (Domain Controller, DNS, ADCS)
+#   SRV01: 192.168.56.20   (Member server, SQL Server Express)
+#   WS01:  192.168.56.30   (Windows 10 workstation)
+#
+# Lab Domain: lab.local / LAB
+#   Administrator:  Vagrant123!
+#   alice.jones:    Password123!   (AS-REP roastable)
+#   bob.smith:      Password123!
+#   carol.white:    Summer2024!    (IT Admin, GenericAll over svc_sql)
+#   dave.brown:     Password123!   (password in AD Description field)
+#   svc_sql:        Sqlpass1!      (Kerberoastable — MSSQLSvc SPN)
+#   svc_backup:     Backup123!     (Kerberoastable)
+#   svc_iis:        IISservice1!   (Kerberoastable — HTTP SPN)
+# =============================================================================
+
+# =============================================================================
+# Provider selection:
+#   VMware (recommended) — vagrant up                          (uses vmware_desktop)
+#   VirtualBox (fallback) — VAGRANT_DEFAULT_PROVIDER=virtualbox vagrant up
+# =============================================================================
+
+VAGRANTFILE_API_VERSION = "2"
+
+DOMAIN       = "lab.local"
+DOMAIN_SHORT = "LAB"
+DOMAIN_PASS  = "Vagrant123!"
+DC_IP        = "192.168.56.10"
+DC02_IP      = "192.168.56.11"
+SRV_IP       = "192.168.56.20"
+SRV2_IP      = "192.168.56.21"
+WS1_IP       = "192.168.56.30"
+
+CHILD_DOMAIN = "child.lab.local"
+CHILD_SHORT  = "CHILD"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.box_check_update    = false
+  config.winrm.transport        = :negotiate
+  config.winrm.basic_auth_only  = false
+
+  # ── DC01: Domain Controller + DNS + ADCS ──────────────────────────────────
+  config.vm.define "dc01", primary: true do |dc|
+    dc.vm.box      = "StefanScherer/windows_2019"
+    dc.vm.hostname = "DC01"
+    dc.vm.network  "private_network", ip: DC_IP, virtualbox__intnet: "lab-net"
+
+    dc.vm.provider "vmware_desktop" do |v|
+      v.vmx["displayName"] = "LAB-DC01"
+      v.memory = 4096
+      v.cpus   = 2
+    end
+
+    dc.vm.provider "virtualbox" do |vb|
+      vb.name   = "LAB-DC01"
+      vb.memory = 4096
+      vb.cpus   = 2
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    # Step 1: Install AD DS + promote — requires reboot
+    dc.vm.provision "shell",
+      path:   "scripts/provision-dc01-step1.ps1",
+      reboot: true,
+      env: {
+        "DOMAIN"       => DOMAIN,
+        "DOMAIN_SHORT" => DOMAIN_SHORT,
+        "ADMIN_PASS"   => DOMAIN_PASS,
+        "DC_IP"        => DC_IP,
+      }
+
+    # Step 2: After reboot — users, ADCS, intentional vulns
+    dc.vm.provision "shell",
+      path: "scripts/provision-dc01-step2.ps1",
+      env: {
+        "DOMAIN"       => DOMAIN,
+        "DOMAIN_SHORT" => DOMAIN_SHORT,
+        "ADMIN_PASS"   => DOMAIN_PASS,
+      }
+  end
+
+  # ── SRV01: Member server with SQL Server Express + file share ─────────────
+  config.vm.define "srv01" do |srv|
+    srv.vm.box      = "StefanScherer/windows_2019"
+    srv.vm.hostname = "SRV01"
+    srv.vm.network  "private_network", ip: SRV_IP, virtualbox__intnet: "lab-net"
+
+    srv.vm.provider "vmware_desktop" do |v|
+      v.vmx["displayName"] = "LAB-SRV01"
+      v.memory = 3072
+      v.cpus   = 2
+    end
+
+    srv.vm.provider "virtualbox" do |vb|
+      vb.name   = "LAB-SRV01"
+      vb.memory = 3072
+      vb.cpus   = 2
+    end
+
+    srv.vm.provision "shell",
+      path: "scripts/provision-srv01.ps1",
+      env: {
+        "DOMAIN"       => DOMAIN,
+        "DOMAIN_SHORT" => DOMAIN_SHORT,
+        "ADMIN_PASS"   => DOMAIN_PASS,
+        "DC_IP"        => DC_IP,
+        "SRV_IP"       => SRV_IP,
+      }
+  end
+
+  # ── WS01: Windows 10 workstation ──────────────────────────────────────────
+  config.vm.define "ws01" do |ws|
+    ws.vm.box      = "StefanScherer/windows_10"
+    ws.vm.hostname = "WS01"
+    ws.vm.network  "private_network", ip: WS1_IP, virtualbox__intnet: "lab-net"
+
+    ws.vm.provider "vmware_desktop" do |v|
+      v.vmx["displayName"] = "LAB-WS01"
+      v.memory = 2048
+      v.cpus   = 2
+    end
+
+    ws.vm.provider "virtualbox" do |vb|
+      vb.name   = "LAB-WS01"
+      vb.memory = 2048
+      vb.cpus   = 2
+    end
+
+    ws.vm.provision "shell",
+      path: "scripts/provision-ws01.ps1",
+      env: {
+        "DOMAIN"       => DOMAIN,
+        "DOMAIN_SHORT" => DOMAIN_SHORT,
+        "ADMIN_PASS"   => DOMAIN_PASS,
+        "DC_IP"        => DC_IP,
+        "WS_IP"        => WS1_IP,
+      }
+  end
+
+  # ── DC02: Child Domain Controller (child.lab.local) ─────────────────────────────
+  config.vm.define "dc02" do |dc2|
+    dc2.vm.box      = "StefanScherer/windows_2019"
+    dc2.vm.hostname = "DC02"
+    dc2.vm.network  "private_network", ip: DC02_IP, virtualbox__intnet: "lab-net"
+
+    dc2.vm.provider "vmware_desktop" do |v|
+      v.vmx["displayName"] = "LAB-DC02"
+      v.memory = 3072
+      v.cpus   = 2
+    end
+
+    dc2.vm.provider "virtualbox" do |vb|
+      vb.name   = "LAB-DC02"
+      vb.memory = 3072
+      vb.cpus   = 2
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    # Step 1: Promote as child DC — requires reboot
+    dc2.vm.provision "shell",
+      path:   "scripts/provision-dc02-step1.ps1",
+      reboot: true,
+      env: {
+        "PARENT_DOMAIN" => DOMAIN,
+        "CHILD_DOMAIN"  => CHILD_DOMAIN,
+        "CHILD_SHORT"   => CHILD_SHORT,
+        "ADMIN_PASS"    => DOMAIN_PASS,
+        "DC02_IP"       => DC02_IP,
+        "DC01_IP"       => DC_IP,
+      }
+
+    # Step 2: Configure child domain users + vulns
+    dc2.vm.provision "shell",
+      path: "scripts/provision-dc02-step2.ps1",
+      env: {
+        "PARENT_DOMAIN" => DOMAIN,
+        "CHILD_DOMAIN"  => CHILD_DOMAIN,
+        "CHILD_SHORT"   => CHILD_SHORT,
+        "ADMIN_PASS"    => DOMAIN_PASS,
+        "DC02_IP"       => DC02_IP,
+        "DC01_IP"       => DC_IP,
+      }
+  end
+
+  # ── SRV02: Child domain member server (IIS + PrinterBug) ─────────────────────
+  config.vm.define "srv02" do |srv2|
+    srv2.vm.box      = "StefanScherer/windows_2019"
+    srv2.vm.hostname = "SRV02"
+    srv2.vm.network  "private_network", ip: SRV2_IP, virtualbox__intnet: "lab-net"
+
+    srv2.vm.provider "vmware_desktop" do |v|
+      v.vmx["displayName"] = "LAB-SRV02"
+      v.memory = 2560
+      v.cpus   = 2
+    end
+
+    srv2.vm.provider "virtualbox" do |vb|
+      vb.name   = "LAB-SRV02"
+      vb.memory = 2560
+      vb.cpus   = 2
+    end
+
+    srv2.vm.provision "shell",
+      path: "scripts/provision-srv02.ps1",
+      env: {
+        "CHILD_DOMAIN"  => CHILD_DOMAIN,
+        "CHILD_SHORT"   => CHILD_SHORT,
+        "ADMIN_PASS"    => DOMAIN_PASS,
+        "DC02_IP"       => DC02_IP,
+        "SRV01_IP"      => SRV_IP,
+        "SRV02_IP"      => SRV2_IP,
+      }
+  end
+end

@@ -1,0 +1,160 @@
+# =============================================================================
+# Scenario: Forest / Domain Trust Attacks
+# VMs: DC01 + DC02 + WS01   |  RAM: ~9 GB   |  Provision time: ~50 min
+#
+# Two domains: lab.local (LAB) and child.lab.local (CHILD)
+# Trust type: Parent-child, bidirectional, transitive (auto-created on DC02 promotion)
+#
+# Attack techniques covered:
+#   Cross-domain enumeration — BloodHound / SharpHound across trust
+#   ExtraSids attack         — Forge inter-realm TGT with Enterprise Admin SID (S-1-5-21-...-519)
+#                              Impacket: ticketer.py + secretsdump.py
+#   Trust ticket forging     — Get child krbtgt NTLM → craft inter-realm TGT
+#   SID history abuse        — Add parent domain SID to forged ticket SID history
+#   Unconstrained + PrinterBug (cross-domain)
+#                            — svc_child_web has unconstrained deleg on DC02
+#                              SpoolSample DC01 → DC01 TGT coerced to child domain host
+#   Cross-domain PTT         — Use golden/trust ticket across domain boundary
+#   Child→Parent escalation path:
+#     1. Compromise frank.admin (Child DA)
+#     2. DCSync child domain → get krbtgt hash
+#     3. Forge inter-realm golden ticket with -extra-sid (Enterprise Admin)
+#     4. Access any resource in lab.local as Enterprise Admin
+#
+# Usage:
+#   IMPORTANT: Start DC01 first, wait for it to finish, then bring up DC02 and WS01
+#   vagrant up dc01          # ~25 min
+#   vagrant up dc02 ws01     # ~30 min (after DC01 is ready)
+#
+#   Or all at once (DC02 waits for DC01 via retry loop):
+#   vagrant up
+#
+#   Tear down:  vagrant destroy -f
+# =============================================================================
+
+VAGRANTFILE_API_VERSION = "2"
+
+DOMAIN        = "lab.local"
+DOMAIN_SHORT  = "LAB"
+CHILD_DOMAIN  = "child.lab.local"
+CHILD_SHORT   = "CHILD"
+DOMAIN_PASS   = "Vagrant123!"
+DC_IP         = "192.168.56.10"
+DC02_IP       = "192.168.56.11"
+WS1_IP        = "192.168.56.30"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.box_check_update   = false
+  config.winrm.transport       = :negotiate
+  config.winrm.basic_auth_only = false
+
+  # ── DC01: Parent domain controller (lab.local) ───────────────────────────────
+  config.vm.define "dc01", primary: true do |dc|
+    dc.vm.box      = "StefanScherer/windows_2019"
+    dc.vm.hostname = "DC01"
+    dc.vm.network  "private_network", ip: DC_IP, virtualbox__intnet: "lab-net"
+
+    dc.vm.provider "vmware_desktop" do |v|
+      v.vmx["displayName"] = "TRUST-DC01"
+      v.memory = 4096
+      v.cpus   = 2
+    end
+
+    dc.vm.provider "virtualbox" do |vb|
+      vb.name   = "TRUST-DC01"
+      vb.memory = 4096
+      vb.cpus   = 2
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    dc.vm.provision "shell",
+      path:   "../../scripts/provision-dc01-step1.ps1",
+      reboot: true,
+      env: {
+        "DOMAIN"       => DOMAIN,
+        "DOMAIN_SHORT" => DOMAIN_SHORT,
+        "ADMIN_PASS"   => DOMAIN_PASS,
+        "DC_IP"        => DC_IP,
+      }
+
+    dc.vm.provision "shell",
+      path: "../../scripts/provision-dc01-step2.ps1",
+      env: {
+        "DOMAIN"       => DOMAIN,
+        "DOMAIN_SHORT" => DOMAIN_SHORT,
+        "ADMIN_PASS"   => DOMAIN_PASS,
+      }
+  end
+
+  # ── DC02: Child domain controller (child.lab.local) ──────────────────────────
+  config.vm.define "dc02" do |dc2|
+    dc2.vm.box      = "StefanScherer/windows_2019"
+    dc2.vm.hostname = "DC02"
+    dc2.vm.network  "private_network", ip: DC02_IP, virtualbox__intnet: "lab-net"
+
+    dc2.vm.provider "vmware_desktop" do |v|
+      v.vmx["displayName"] = "TRUST-DC02"
+      v.memory = 3072
+      v.cpus   = 2
+    end
+
+    dc2.vm.provider "virtualbox" do |vb|
+      vb.name   = "TRUST-DC02"
+      vb.memory = 3072
+      vb.cpus   = 2
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    dc2.vm.provision "shell",
+      path:   "../../scripts/provision-dc02-step1.ps1",
+      reboot: true,
+      env: {
+        "PARENT_DOMAIN" => DOMAIN,
+        "CHILD_DOMAIN"  => CHILD_DOMAIN,
+        "CHILD_SHORT"   => CHILD_SHORT,
+        "ADMIN_PASS"    => DOMAIN_PASS,
+        "DC02_IP"       => DC02_IP,
+        "DC01_IP"       => DC_IP,
+      }
+
+    dc2.vm.provision "shell",
+      path: "../../scripts/provision-dc02-step2.ps1",
+      env: {
+        "PARENT_DOMAIN" => DOMAIN,
+        "CHILD_DOMAIN"  => CHILD_DOMAIN,
+        "CHILD_SHORT"   => CHILD_SHORT,
+        "ADMIN_PASS"    => DOMAIN_PASS,
+        "DC02_IP"       => DC02_IP,
+        "DC01_IP"       => DC_IP,
+      }
+  end
+
+  # ── WS01: Domain workstation (joined to lab.local, foothold) ─────────────────
+  config.vm.define "ws01" do |ws|
+    ws.vm.box      = "StefanScherer/windows_10"
+    ws.vm.hostname = "WS01"
+    ws.vm.network  "private_network", ip: WS1_IP, virtualbox__intnet: "lab-net"
+
+    ws.vm.provider "vmware_desktop" do |v|
+      v.vmx["displayName"] = "TRUST-WS01"
+      v.memory = 2048
+      v.cpus   = 2
+    end
+
+    ws.vm.provider "virtualbox" do |vb|
+      vb.name   = "TRUST-WS01"
+      vb.memory = 2048
+      vb.cpus   = 2
+    end
+
+    ws.vm.provision "shell",
+      path: "../../scripts/provision-ws01.ps1",
+      env: {
+        "DOMAIN"       => DOMAIN,
+        "DOMAIN_SHORT" => DOMAIN_SHORT,
+        "ADMIN_PASS"   => DOMAIN_PASS,
+        "DC_IP"        => DC_IP,
+        "WS_IP"        => WS1_IP,
+      }
+  end
+end
