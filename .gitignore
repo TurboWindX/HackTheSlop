@@ -1,5 +1,69 @@
-﻿node_modules/
+﻿# Dependencies
+node_modules/
+
+# Build output
 dist/
+build/
+.cache/
+
+# Vagrant
 lab/.vagrant/
+
+# Environment & secrets
 .env
+.env.*
+!.env.example
 *.local
+
+# Large binary / media files
+*.iso
+*.ova
+*.ovf
+*.vmdk
+*.vhd
+*.vhdx
+*.qcow2
+*.img
+*.box
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tar.xz
+*.7z
+*.rar
+*.gz
+*.bz2
+*.xz
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.deb
+*.rpm
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# TypeScript cache
+*.tsbuildinfo
+
