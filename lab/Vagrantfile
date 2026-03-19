@@ -24,7 +24,7 @@
 #   SRV01: 192.168.56.20   (Member server, SQL Server Express)
 #   WS01:  192.168.56.30   (Windows 10 workstation)
 #
-# Lab Domain: lab.local / LAB
+# Lab Domain: turbo.lab / LAB
 #   Administrator:  Vagrant123!
 #   alice.jones:    Password123!   (AS-REP roastable)
 #   bob.smith:      Password123!
@@ -43,8 +43,8 @@
 
 VAGRANTFILE_API_VERSION = "2"
 
-DOMAIN       = "lab.local"
-DOMAIN_SHORT = "LAB"
+DOMAIN       = "turbo.lab"
+DOMAIN_SHORT = "TURBO"
 DOMAIN_PASS  = "Vagrant123!"
 DC_IP        = "192.168.56.10"
 DC02_IP      = "192.168.56.11"
@@ -52,7 +52,7 @@ SRV_IP       = "192.168.56.20"
 SRV2_IP      = "192.168.56.21"
 WS1_IP       = "192.168.56.30"
 
-CHILD_DOMAIN = "child.lab.local"
+CHILD_DOMAIN = "child.turbo.lab"
 CHILD_SHORT  = "CHILD"
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
@@ -158,7 +158,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       }
   end
 
-  # ── DC02: Child Domain Controller (child.lab.local) ─────────────────────────────
+  # ── DC02: Child Domain Controller (child.turbo.lab) ─────────────────────────────
   config.vm.define "dc02" do |dc2|
     dc2.vm.box      = "StefanScherer/windows_2019"
     dc2.vm.hostname = "DC02"

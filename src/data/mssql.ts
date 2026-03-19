@@ -1,7 +1,7 @@
 export const mssqlCommands = {
     enumeration: [
         // Discover SQL instances on the network
-        "crackmapexec mssql {{DC_IP}}/24 -u {{USERNAME}} -p '{{PASSWORD}}' -d {{DOMAIN}}",
+        "nxc mssql 192.168.56.0/24 -u {{USERNAME}} -p '{{PASSWORD}}' -d {{DOMAIN}}",
         // Connect with Impacket
         "mssqlclient.py {{DOMAIN}}/{{USERNAME}}:'{{PASSWORD}}'@{{TARGET_IP}} -windows-auth",
         // PowerUpSQL (run on Windows)

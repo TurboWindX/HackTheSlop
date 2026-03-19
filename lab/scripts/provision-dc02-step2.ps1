@@ -11,18 +11,18 @@
 #   - SMB signing disabled
 #   - DNS conditional forwarder   (child → parent resolution)
 #
-# Trust: child.lab.local is a child domain of lab.local
+# Trust: child.turbo.lab is a child domain of turbo.lab
 # Forest attack paths: ExtraSids, trust ticket forging, SID history escalation
 #
-# LAB USE ONLY — Never run on a real domain.
+# TURBO USE ONLY — Never run on a real domain.
 # =============================================================================
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Continue"
 
-$parentDomain = $env:PARENT_DOMAIN   # lab.local
-$childDomain  = $env:CHILD_DOMAIN    # child.lab.local
+$parentDomain = $env:PARENT_DOMAIN   # turbo.lab
+$childDomain  = $env:CHILD_DOMAIN    # child.turbo.lab
 $childShort   = $env:CHILD_SHORT     # CHILD
 $adminPass    = $env:ADMIN_PASS      # Vagrant123!
 $dc01Ip       = $env:DC01_IP         # 192.168.56.10
@@ -183,7 +183,7 @@ Write-Host ""
 Write-Host "  Cross-domain attack paths:"
 Write-Host "    1. Compromise frank.admin (Child DA)"
 Write-Host "       Get child krbtgt hash → forge ticket with ParentDomain SID"
-Write-Host "       ExtraSids = Enterprise Admins in lab.local"
+Write-Host "       ExtraSids = Enterprise Admins in turbo.lab"
 Write-Host "    2. PrinterBug (DC01/DC02) + svc_child_web unconstrained delegation"
 Write-Host "       Capture DC TGT → pass-the-ticket → DCSync"
 Write-Host "    3. Trust ticket: child krbtgt → inter-realm TGT → Enterprise Admin"

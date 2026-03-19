@@ -7,10 +7,10 @@ const techniques = [
     { id: 'lateral', name: 'Lateral Movement' },
 ];
 
-const TechniqueSelector = ({ onSelect }) => {
+const TechniqueSelector = ({ onSelect }: { onSelect: (id: string) => void }) => {
     const [selectedTechnique, setSelectedTechnique] = useState('');
 
-    const handleChange = (event) => {
+    const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
         const techniqueId = event.target.value;
         setSelectedTechnique(techniqueId);
         onSelect(techniqueId);

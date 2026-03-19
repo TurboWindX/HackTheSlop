@@ -7,15 +7,15 @@
 # - Disables SMB signing (enables relay attacks)
 # - Creates a world-readable file share with a fake credentials file
 #
-# LAB USE ONLY
+# TURBO USE ONLY
 # =============================================================================
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Continue"
 
-$domain      = $env:DOMAIN       # lab.local
-$domainShort = $env:DOMAIN_SHORT  # LAB
+$domain      = $env:DOMAIN       # turbo.lab
+$domainShort = $env:DOMAIN_SHORT  # TURBO
 $adminPass   = $env:ADMIN_PASS    # Vagrant123!
 $dcIp        = $env:DC_IP         # 192.168.56.10
 

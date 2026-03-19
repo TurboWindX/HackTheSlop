@@ -102,7 +102,7 @@ vagrant status      # check which VMs are running
 | ADCS ESC1 | `VulnTemplate` on DC01 | `certipy find -vulnerable` |
 | GenericAll ACL | `carol.white` → `svc_sql` | BloodHound abuse path |
 | NTLM Relay | All VMs (SMB signing off) | `Responder` + `ntlmrelayx` |
-| Creds in file share | `\\SRV01\IT\it-creds.txt` | `crackmapexec smb --shares` |
+| Creds in file share | `\\SRV01\IT\it-creds.txt` | `nxc smb --shares` |
 | DPAPI vault | WS01 Credential Manager | `mimikatz dpapi` |
 | xp_cmdshell enabled | SQL Express on SRV01 | `mssqlclient.py` |
 

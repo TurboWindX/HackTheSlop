@@ -2,7 +2,7 @@
 # Scenario: Forest / Domain Trust Attacks
 # VMs: DC01 + DC02 + WS01   |  RAM: ~9 GB   |  Provision time: ~50 min
 #
-# Two domains: lab.local (LAB) and child.lab.local (CHILD)
+# Two domains: turbo.lab (LAB) and child.turbo.lab (CHILD)
 # Trust type: Parent-child, bidirectional, transitive (auto-created on DC02 promotion)
 #
 # Attack techniques covered:
@@ -19,7 +19,7 @@
 #     1. Compromise frank.admin (Child DA)
 #     2. DCSync child domain → get krbtgt hash
 #     3. Forge inter-realm golden ticket with -extra-sid (Enterprise Admin)
-#     4. Access any resource in lab.local as Enterprise Admin
+#     4. Access any resource in turbo.lab as Enterprise Admin
 #
 # Usage:
 #   IMPORTANT: Start DC01 first, wait for it to finish, then bring up DC02 and WS01
@@ -34,9 +34,9 @@
 
 VAGRANTFILE_API_VERSION = "2"
 
-DOMAIN        = "lab.local"
-DOMAIN_SHORT  = "LAB"
-CHILD_DOMAIN  = "child.lab.local"
+DOMAIN        = "turbo.lab"
+DOMAIN_SHORT  = "TURBO"
+CHILD_DOMAIN  = "child.turbo.lab"
 CHILD_SHORT   = "CHILD"
 DOMAIN_PASS   = "Vagrant123!"
 DC_IP         = "192.168.56.10"
@@ -48,7 +48,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.winrm.transport       = :negotiate
   config.winrm.basic_auth_only = false
 
-  # ── DC01: Parent domain controller (lab.local) ───────────────────────────────
+  # ── DC01: Parent domain controller (turbo.lab) ───────────────────────────────
   config.vm.define "dc01", primary: true do |dc|
     dc.vm.box      = "StefanScherer/windows_2019"
     dc.vm.hostname = "DC01"
@@ -86,7 +86,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       }
   end
 
-  # ── DC02: Child domain controller (child.lab.local) ──────────────────────────
+  # ── DC02: Child domain controller (child.turbo.lab) ──────────────────────────
   config.vm.define "dc02" do |dc2|
     dc2.vm.box      = "StefanScherer/windows_2019"
     dc2.vm.hostname = "DC02"
@@ -129,7 +129,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       }
   end
 
-  # ── WS01: Domain workstation (joined to lab.local, foothold) ─────────────────
+  # ── WS01: Domain workstation (joined to turbo.lab, foothold) ─────────────────
   config.vm.define "ws01" do |ws|
     ws.vm.box      = "StefanScherer/windows_10"
     ws.vm.hostname = "WS01"

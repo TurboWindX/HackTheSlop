@@ -1,38 +1,41 @@
 # =============================================================================
 # DC02 — Step 1: Install AD DS and promote as child domain controller
 #
-# Creates child.lab.local as a child domain of lab.local.
+# Creates child.turbo.lab as a child domain of turbo.lab.
 # Vagrant triggers reboot: true after this script completes.
 # Step 2 (users, vulns) runs after the reboot.
 #
 # Prerequisites: DC01 must be fully provisioned and reachable at DC01_IP.
 #
-# LAB USE ONLY
+# TURBO USE ONLY
 # =============================================================================
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Stop"
 
-$parentDomain = $env:PARENT_DOMAIN  # lab.local
-$childDomain  = $env:CHILD_DOMAIN   # child.lab.local
+$parentDomain = $env:PARENT_DOMAIN  # turbo.lab
+$childDomain  = $env:CHILD_DOMAIN   # child.turbo.lab
 $childShort   = $env:CHILD_SHORT    # CHILD
 $adminPass    = $env:ADMIN_PASS     # Vagrant123!
 $dc02Ip       = $env:DC02_IP        # 192.168.56.11
 $dc01Ip       = $env:DC01_IP        # 192.168.56.10
 
-Write-Host "[*] Disabling IPv6..."
+# ── Disable IPv6 globally via registry (same fix as DC01) ─────────────────────
+Write-Host "[*] Disabling IPv6 globally via registry..."
+$tcpip6Path = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters"
+if (-not (Test-Path $tcpip6Path)) { New-Item -Path $tcpip6Path -Force | Out-Null }
+Set-ItemProperty -Path $tcpip6Path -Name "DisabledComponents" -Value 0xFF -Type DWord
 Get-NetAdapterBinding -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue |
-    Disable-NetAdapterBinding -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+    Disable-NetAdapterBinding -ComponentID ms_tcpip6 -PassThru -ErrorAction SilentlyContinue | Out-Null
 
 Write-Host "[*] Setting static IP to $dc02Ip..."
-# Sort by ifIndex — lowest is the Vagrant NAT adapter, skip it
-$adapters = Get-NetAdapter | Sort-Object ifIndex
+$adapters = Get-NetAdapter | Where-Object { $_.Status -ne 'Disabled' } | Sort-Object ifIndex
 $labIface = $adapters | Select-Object -Skip 1 | Select-Object -First 1
 if ($null -ne $labIface) {
     if ($labIface.Status -ne "Up") {
         Enable-NetAdapter -Name $labIface.Name -Confirm:$false -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 3
+        Start-Sleep -Seconds 5
     }
     $currentIp = (Get-NetIPAddress -InterfaceAlias $labIface.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress
     if ($currentIp -ne $dc02Ip) {
@@ -45,6 +48,8 @@ if ($null -ne $labIface) {
 } else {
     Write-Host "[!] No secondary adapter found - skipping static IP"
 }
+
+Start-Sleep -Seconds 8
 
 Write-Host "[*] Setting local Administrator password (required before DC promotion)..."
 $secPass = ConvertTo-SecureString $adminPass -AsPlainText -Force
@@ -71,6 +76,8 @@ while ((Get-Date) -lt $deadline) {
 Write-Host "[*] Installing AD DS + DNS roles..."
 Install-WindowsFeature -Name AD-Domain-Services, DNS -IncludeManagementTools | Out-Null
 
+Clear-DnsClientCache -ErrorAction SilentlyContinue
+
 Write-Host "[*] Promoting as child domain controller: $childDomain (child of $parentDomain)..."
 $safeModePass = ConvertTo-SecureString $adminPass -AsPlainText -Force
 $parentCred   = New-Object PSCredential(
@@ -87,8 +94,7 @@ Install-ADDSDomain `
     -SafeModeAdministratorPassword $safeModePass `
     -Credential                    $parentCred `
     -InstallDns `
-    -CreateDnsDelegation           $true `
-    -DNSDelegationCredential       $parentCred `
+    -CreateDnsDelegation:$false `
     -Force `
     -NoRebootOnCompletion | Out-Null
 

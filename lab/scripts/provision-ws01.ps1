@@ -7,15 +7,15 @@
 # - Enables WinRM (for Evil-WinRM testing)
 # - Stores credentials in Credential Manager (for DPAPI attack practice)
 #
-# LAB USE ONLY
+# TURBO USE ONLY
 # =============================================================================
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Continue"
 
-$domain      = $env:DOMAIN       # lab.local
-$domainShort = $env:DOMAIN_SHORT  # LAB
+$domain      = $env:DOMAIN       # turbo.lab
+$domainShort = $env:DOMAIN_SHORT  # TURBO
 $adminPass   = $env:ADMIN_PASS    # Vagrant123!
 $dcIp        = $env:DC_IP         # 192.168.56.10
 
@@ -78,7 +78,7 @@ Write-Host "[*] Configuring AutoLogon (cleartext creds in registry)..."
 $winlogon = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
 try {
     Set-ItemProperty $winlogon -Name "AutoAdminLogon"   -Value "1"            -Type String
-    Set-ItemProperty $winlogon -Name "DefaultDomainName" -Value "LAB"         -Type String
+    Set-ItemProperty $winlogon -Name "DefaultDomainName" -Value "TURBO"         -Type String
     Set-ItemProperty $winlogon -Name "DefaultUserName"   -Value "bob.smith"   -Type String
     Set-ItemProperty $winlogon -Name "DefaultPassword"   -Value "Password123!" -Type String
     Write-Host "  [VULN] AutoLogon set: LAB\bob.smith / Password123! (cleartext in registry)"

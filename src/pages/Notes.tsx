@@ -5,7 +5,7 @@ const Notes: React.FC = () => {
     return (
         <div>
             <h1>User Notes</h1>
-            <NotesViewer />
+            <NotesViewer notes={[]} />
         </div>
     );
 };

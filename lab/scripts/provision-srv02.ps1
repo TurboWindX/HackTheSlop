@@ -1,7 +1,7 @@
 # =============================================================================
 # SRV02 — Child Domain Member Server
 #
-# - Joins child.lab.local domain
+# - Joins child.turbo.lab domain
 # - Installs IIS with Windows Authentication (NTLM relay target)
 # - Enables Print Spooler (PrinterBug / SpoolSample)
 # - Disables SMB signing (enables relay attacks)
@@ -9,14 +9,14 @@
 # - Stores cross-domain credentials in DPAPI vault (parent domain creds)
 # - Creates world-readable share with sensitive notes
 #
-# LAB USE ONLY
+# TURBO USE ONLY
 # =============================================================================
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Continue"
 
-$childDomain = $env:CHILD_DOMAIN   # child.lab.local
+$childDomain = $env:CHILD_DOMAIN   # child.turbo.lab
 $childShort  = $env:CHILD_SHORT    # CHILD
 $adminPass   = $env:ADMIN_PASS     # Vagrant123!
 $dc02Ip      = $env:DC02_IP        # 192.168.56.11
@@ -136,11 +136,11 @@ Write-Host "  [VULN] WinRM enabled on 5985 — Evil-WinRM target"
 # ── [VULN] Store cross-domain credentials in DPAPI vault ──────────────────────
 # Parent domain (LAB) creds cached here — extractable via Mimikatz dpapi::cred
 Write-Host "[*] Storing cross-domain credentials in Credential Manager..."
-cmdkey /add:"TERMSRV/SRV01.lab.local"  /user:"LAB\svc_backup"    /pass:"Backup123!"  | Out-Null
-cmdkey /add:"TERMSRV/DC01.lab.local"   /user:"LAB\Administrator"  /pass:"Vagrant123!" | Out-Null
+cmdkey /add:"TERMSRV/SRV01.turbo.lab"  /user:"LAB\svc_backup"    /pass:"Backup123!"  | Out-Null
+cmdkey /add:"TERMSRV/DC01.turbo.lab"   /user:"LAB\Administrator"  /pass:"Vagrant123!" | Out-Null
 Write-Host "  [VULN] Cross-domain parent creds in DPAPI vault:"
-Write-Host "         LAB\svc_backup    for TERMSRV/SRV01.lab.local"
-Write-Host "         LAB\Administrator for TERMSRV/DC01.lab.local"
+Write-Host "         LAB\svc_backup    for TERMSRV/SRV01.turbo.lab"
+Write-Host "         LAB\Administrator for TERMSRV/DC01.turbo.lab"
 
 # ── [VULN] World-readable share with sensitive notes ──────────────────────────
 Write-Host "[*] Creating IT-Child share..."
@@ -152,7 +152,7 @@ Updated: 2026-01-20
 
 DC02 DSRM password:              Vagrant123!
 Child domain krbtgt last reset:  NEVER (target for trust ticket attack)
-Parent domain linked SQL:        sa_lab / Lab12345 on SRV01.lab.local
+Parent domain linked SQL:        sa_lab / Lab12345 on SRV01.turbo.lab
 frank.admin password hint:       Admin123!
 "@ | Set-Content -Path "$sharePath\notes.txt"
 New-SmbShare -Name "IT-Child" -Path $sharePath -FullAccess "Everyone" -ErrorAction SilentlyContinue

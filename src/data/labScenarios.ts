@@ -18,25 +18,39 @@ export type ScenarioAccount = {
   vuln: string;
 };
 
+export type AssumedBreach = {
+  user: string;
+  pass: string;
+  domain: string;
+  note: string;
+};
+
+export type Scope = {
+  description: string;   // e.g. "192.168.56.0/24 (host-only)"
+  ranges: string[];      // individual hosts/ranges with labels
+};
+
 export type LabScenario = {
   id: string;
   name: string;
   tagline: string;
-  color: string;         // CSS color token
+  color: string;           // CSS color token
   vms: ScenarioVM[];
   ramGB: number;
   provisionMinutes: number;
   techniques: ScenarioTechnique[];
   accounts: ScenarioAccount[];
-  launchDir: string;     // relative to lab/ dir
-  tools: string[];       // recommended attack tools
+  assumedBreach: AssumedBreach;  // starting creds for assumed-breach scenario
+  scope: Scope;                  // IP scope for the engagement
+  launchDir: string;             // relative to lab/ dir
+  tools: string[];               // recommended attack tools
 };
 
 export const labScenarios: LabScenario[] = [
   {
     id: 'kerberos-basics',
-    name: 'Kerberos Basics',
-    tagline: 'AS-REP, Kerberoasting, delegation chains, Golden/Silver tickets',
+    name: 'Ticket Forge',
+    tagline: 'AS-REP Roasting, Kerberoasting, delegation chains, Golden/Silver tickets',
     color: 'var(--blue)',
     vms: [
       { name: 'DC01', ip: '192.168.56.10', role: 'Domain Controller / DNS' },
@@ -78,11 +92,21 @@ export const labScenarios: LabScenario[] = [
     ],
     launchDir: 'scenarios/kerberos-basics',
     tools: ['Rubeus', 'Impacket', 'certipy', 'BloodHound', 'hashcat / john'],
+    assumedBreach: {
+      user: 'dave.brown',
+      pass: 'Password123!',
+      domain: 'TURBO',
+      note: 'Low-priv domain user. Password found in their AD Description field — classic IT mistake.',
+    },
+    scope: {
+      description: '192.168.56.0/24 (host-only)',
+      ranges: ['192.168.56.10 — DC01 (turbo.lab)', '192.168.56.30 — WS01'],
+    },
   },
 
   {
     id: 'adcs-deep-dive',
-    name: 'ADCS Deep Dive',
+    name: 'Certifried',
     tagline: 'ESC1–ESC8, certificate theft, PKINIT, enrollment agent abuse',
     color: 'var(--yellow)',
     vms: [
@@ -125,11 +149,21 @@ export const labScenarios: LabScenario[] = [
     ],
     launchDir: 'scenarios/adcs-deep-dive',
     tools: ['certipy', 'Certify', 'Rubeus (asktgt)', 'ntlmrelayx', 'BloodHound'],
+    assumedBreach: {
+      user: 'alice.jones',
+      pass: 'Password123!',
+      domain: 'TURBO',
+      note: 'Domain user with default enrollment rights on all ADCS templates — start here to abuse ESC1+.',
+    },
+    scope: {
+      description: '192.168.56.0/24 (host-only)',
+      ranges: ['192.168.56.10 — DC01 (turbo.lab + LAB-CA)', '192.168.56.30 — WS01'],
+    },
   },
 
   {
     id: 'acl-abuse',
-    name: 'ACL Abuse',
+    name: 'Inherited Sins',
     tagline: 'GenericAll, DCSync, AdminSDHolder, ForceChangePwd, GPO abuse, RBCD',
     color: 'var(--purple, #bc8cff)',
     vms: [
@@ -171,11 +205,21 @@ export const labScenarios: LabScenario[] = [
     ],
     launchDir: 'scenarios/acl-abuse',
     tools: ['PowerView', 'BloodHound', 'Impacket secretsdump', 'dacledit.py', 'pywhisker'],
+    assumedBreach: {
+      user: 'carol.white',
+      pass: 'Summer2024!',
+      domain: 'TURBO',
+      note: 'User with GenericAll over svc_sql and AdminSDHolder rights — pull the ACL chain from here.',
+    },
+    scope: {
+      description: '192.168.56.0/24 (host-only)',
+      ranges: ['192.168.56.10 — DC01 (turbo.lab)', '192.168.56.30 — WS01'],
+    },
   },
 
   {
     id: 'lateral-movement',
-    name: 'Lateral Movement',
+    name: 'Ghost Walk',
     tagline: 'PTH, PTT, Evil-WinRM, DCOM, WMI, MSSQL, DPAPI, creds in shares',
     color: 'var(--green)',
     vms: [
@@ -220,18 +264,28 @@ export const labScenarios: LabScenario[] = [
       { user: 'sa_lab', pass: 'Lab12345', vuln: 'MSSQL sysadmin login (xp_cmdshell)' },
     ],
     launchDir: 'scenarios/lateral-movement',
-    tools: ['Evil-WinRM', 'Impacket', 'CrackMapExec', 'Mimikatz', 'SharpDPAPI'],
+    tools: ['Evil-WinRM', 'Impacket', 'NetExec', 'Mimikatz', 'SharpDPAPI'],
+    assumedBreach: {
+      user: 'bob.smith',
+      pass: 'Password123!',
+      domain: 'TURBO',
+      note: 'AutoLogon user on WS01 — creds found in registry. Simulates initial access via phishing or physical access.',
+    },
+    scope: {
+      description: '192.168.56.0/24 (host-only)',
+      ranges: ['192.168.56.10 — DC01', '192.168.56.20 — SRV01 (SQL + IIS)', '192.168.56.30 — WS01'],
+    },
   },
 
   {
     id: 'forest-trust',
-    name: 'Forest Trust Attacks',
+    name: 'Bloodline',
     tagline: 'Parent-child + ExtraSids + trust ticket + cross-domain Kerberos',
     color: 'var(--red, #ff7b72)',
     vms: [
-      { name: 'DC01', ip: '192.168.56.10', role: 'lab.local — Parent DC' },
-      { name: 'DC02', ip: '192.168.56.11', role: 'child.lab.local — Child DC' },
-      { name: 'WS01', ip: '192.168.56.30', role: 'lab.local workstation (foothold)' },
+      { name: 'DC01', ip: '192.168.56.10', role: 'turbo.lab — Parent DC' },
+      { name: 'DC02', ip: '192.168.56.11', role: 'child.turbo.lab — Child DC' },
+      { name: 'WS01', ip: '192.168.56.30', role: 'turbo.lab workstation (foothold)' },
     ],
     ramGB: 9,
     provisionMinutes: 50,
@@ -259,7 +313,7 @@ export const labScenarios: LabScenario[] = [
           '1. Compromise frank.admin (Child DA)',
           '2. DCSync child domain → child krbtgt NTLM hash',
           '3. ticketer.py: forge inter-realm ticket with Enterprise Admin extra SID',
-          '4. Access DC01 / all lab.local resources as Enterprise Admin',
+          '4. Access DC01 / all turbo.lab resources as Enterprise Admin',
         ],
       },
     ],
@@ -271,16 +325,26 @@ export const labScenarios: LabScenario[] = [
     ],
     launchDir: 'scenarios/forest-trust',
     tools: ['Impacket ticketer.py', 'Rubeus', 'BloodHound', 'PowerView', 'mimikatz lsadump::trust'],
+    assumedBreach: {
+      user: 'dave.brown',
+      pass: 'Password123!',
+      domain: 'TURBO',
+      note: 'Low-priv user in the parent domain — enumerate cross-domain trust, escalate child->parent via ExtraSids.',
+    },
+    scope: {
+      description: '192.168.56.0/24 (host-only)',
+      ranges: ['192.168.56.10 — DC01 (turbo.lab)', '192.168.56.11 — DC02 (child.turbo.lab)', '192.168.56.30 — WS01'],
+    },
   },
 
   {
     id: 'full-lab',
-    name: 'Full Lab',
+    name: 'Pandemonium',
     tagline: 'Everything — all 5 VMs, all attack categories, GOAD-style',
     color: 'var(--fg)',
     vms: [
-      { name: 'DC01', ip: '192.168.56.10', role: 'lab.local DC + ADCS' },
-      { name: 'DC02', ip: '192.168.56.11', role: 'child.lab.local DC' },
+      { name: 'DC01', ip: '192.168.56.10', role: 'turbo.lab DC + ADCS' },
+      { name: 'DC02', ip: '192.168.56.11', role: 'child.turbo.lab DC' },
       { name: 'SRV01', ip: '192.168.56.20', role: 'SQL Express + IIS + share' },
       { name: 'SRV02', ip: '192.168.56.21', role: 'Child IIS + PrinterBug' },
       { name: 'WS01', ip: '192.168.56.30', role: 'Workstation' },
@@ -294,7 +358,20 @@ export const labScenarios: LabScenario[] = [
       { category: 'All Lateral', items: ['PTH, PTT, Evil-WinRM, DCOM, WMI, MSSQL, DPAPI, AutoLogon'] },
       { category: 'All Trust', items: ['ExtraSids, trust ticket, SID history, cross-domain Kerberoast'] },
     ],
-    accounts: [],
+    accounts: [
+      { user: 'dave.brown', pass: 'Password123!', vuln: 'Low-priv starting user (pass in AD Description)' },
+      { user: 'Administrator', pass: 'Vagrant123!', vuln: 'Domain Admin — end goal' },
+    ],
+    assumedBreach: {
+      user: 'dave.brown',
+      pass: 'Password123!',
+      domain: 'TURBO',
+      note: 'Starting point across all attack chains. Escalate through Kerberos, ADCS, ACLs, lateral movement, and trust attacks.',
+    },
+    scope: {
+      description: '192.168.56.0/24 (host-only)',
+      ranges: ['192.168.56.10 — DC01 (turbo.lab)', '192.168.56.11 — DC02 (child.turbo.lab)', '192.168.56.20 — SRV01', '192.168.56.21 — SRV02', '192.168.56.30 — WS01'],
+    },
     launchDir: '.',
     tools: ['Everything'],
   },

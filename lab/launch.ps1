@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 # TurboPentest Lab Launcher
 #
 # Interactive scenario picker for the AD lab.
@@ -211,8 +211,8 @@ function Launch-Scenario {
         Write-Host "  [+] Lab ready: $($scenario.Name)" -ForegroundColor Green
         Write-Host ""
         Write-Host "  Network:" -ForegroundColor DarkGray
-        Write-Host "    DC01:  192.168.56.10  (lab.local DC)"         -ForegroundColor DarkGray
-        if ($scenario.VMs -match "DC02")  { Write-Host "    DC02:  192.168.56.11  (child.lab.local DC)" -ForegroundColor DarkGray }
+        Write-Host "    DC01:  192.168.56.10  (turbo.lab DC)"         -ForegroundColor DarkGray
+        if ($scenario.VMs -match "DC02")  { Write-Host "    DC02:  192.168.56.11  (child.turbo.lab DC)" -ForegroundColor DarkGray }
         if ($scenario.VMs -match "SRV01") { Write-Host "    SRV01: 192.168.56.20  (member server)"      -ForegroundColor DarkGray }
         if ($scenario.VMs -match "SRV02") { Write-Host "    SRV02: 192.168.56.21  (child member server)" -ForegroundColor DarkGray }
         if ($scenario.VMs -match "WS01")  { Write-Host "    WS01:  192.168.56.30  (workstation)"        -ForegroundColor DarkGray }

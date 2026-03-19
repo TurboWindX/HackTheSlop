@@ -54,32 +54,36 @@ export const engagementService = {
     },
 
     /**
-     * Return UPN-style username (user@domain) from the engagement.
+     * Return UPN-style username from the engagement (uses first cred entry or legacy field).
      */
     getUpn(engagement: Engagement): string {
-        const user = engagement.username.includes('@')
-            ? engagement.username
-            : engagement.username;
-        const domain = engagement.domain.toLowerCase();
-        return user.includes('@') ? user : `${user}@${domain}`;
+        const user   = engagement.username ?? engagement.creds[0]?.username ?? '';
+        const domain = engagement.domain ?? engagement.creds[0]?.domain ?? '';
+        if (!user) return domain || '';
+        return user.includes('@') ? user : domain ? `${user}@${domain}` : user;
     },
 
     /**
      * Build a flat variable map for command template substitution.
+     * Prefers first cred/hash entry when specific fields not set.
      */
-    getTemplateVars(engagement: Engagement): Record<string, string> {
-        const upn = engagementService.getUpn(engagement);
-        const shortUser = engagement.username.split('@')[0];
+    getTemplateVars(engagement: Engagement | null): Record<string, string> {
+        const firstCred = engagement?.creds[0];
+        const firstHash = engagement?.hashes[0];
+        const user   = engagement?.username ?? firstCred?.username ?? '';
+        const domain = engagement?.domain   ?? firstCred?.domain   ?? '';
+        const pass   = engagement?.password ?? firstCred?.password ?? '';
+        const hash   = engagement?.ntlmHash ?? firstHash?.hash     ?? '';
+        const upn    = user.includes('@') ? user : domain ? `${user}@${domain}` : user;
         return {
-            USERNAME:    shortUser,
-            UPN:         upn,
-            PASSWORD:    engagement.password,
-            DOMAIN:      engagement.domain,
-            DOMAIN_UPPER: engagement.domain.toUpperCase(),
-            // Convert domain to DN format: mydomain.local → DC=mydomain,DC=local
-            DOMAIN_DN:   engagement.domain.split('.').map(p => `DC=${p}`).join(','),
-            DC_IP:       engagement.dcIp ?? '<DC_IP>',
-            NTLM_HASH:   engagement.ntlmHash ?? '<NTLM_HASH>',
+            USERNAME:     user.split('@')[0] || '<USERNAME>',
+            UPN:          upn || '<UPN>',
+            PASSWORD:     pass || '<PASSWORD>',
+            DOMAIN:       domain || '<DOMAIN>',
+            DOMAIN_UPPER: (domain || '<DOMAIN>').toUpperCase(),
+            DOMAIN_DN:    domain ? domain.split('.').map((p: string) => `DC=${p}`).join(',') : '<DOMAIN_DN>',
+            DC_IP:        engagement?.dcIp ?? '<DC_IP>',
+            NTLM_HASH:    hash || '<NTLM_HASH>',
         };
     },
 };

@@ -4,7 +4,7 @@
 #
 # Attack techniques covered:
 #   ESC1   — VulnTemplate: ENROLLEE_SUPPLIES_SUBJECT, Domain Users enroll
-#            certipy req -ca LAB-CA -template VulnTemplate -upn administrator@lab.local
+#            certipy req -ca LAB-CA -template VulnTemplate -upn administrator@turbo.lab
 #   ESC2   — AnyPurposeTemplate: no EKU restriction, Domain Users enroll
 #            Can be used as sub-CA or for any extended purpose
 #   ESC3   — EnrollmentAgentTemplate: request certs on behalf of any principal
@@ -23,8 +23,8 @@
 
 VAGRANTFILE_API_VERSION = "2"
 
-DOMAIN       = "lab.local"
-DOMAIN_SHORT = "LAB"
+DOMAIN       = "turbo.lab"
+DOMAIN_SHORT = "TURBO"
 DOMAIN_PASS  = "Vagrant123!"
 DC_IP        = "192.168.56.10"
 WS1_IP       = "192.168.56.30"

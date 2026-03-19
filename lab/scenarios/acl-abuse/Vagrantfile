@@ -23,8 +23,8 @@
 
 VAGRANTFILE_API_VERSION = "2"
 
-DOMAIN       = "lab.local"
-DOMAIN_SHORT = "LAB"
+DOMAIN       = "turbo.lab"
+DOMAIN_SHORT = "TURBO"
 DOMAIN_PASS  = "Vagrant123!"
 DC_IP        = "192.168.56.10"
 WS1_IP       = "192.168.56.30"

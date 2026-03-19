@@ -17,7 +17,7 @@ export const pentestPhases: PhaseStep[] = [
         name: '1. Initial Recon',
         description: 'Discover live hosts, open ports, and services within scope.',
         techniques: ['nmap', 'enum4linux', 'netdiscover'],
-        tools: ['nmap', 'enum4linux-ng', 'crackmapexec'],
+        tools: ['nmap', 'enum4linux-ng', 'nxc'],
         promptHint: 'Focus on discovering live hosts, identifying domain controllers, and enumerating services on the defined scope.',
     },
     {
@@ -25,7 +25,7 @@ export const pentestPhases: PhaseStep[] = [
         name: '2. Active Directory Enumeration',
         description: 'Enumerate users, groups, GPOs, trusts, and gather BloodHound data.',
         techniques: ['ldap', 'bloodhound', 'smb'],
-        tools: ['BloodHound', 'SharpHound', 'ldapdomaindump', 'crackmapexec'],
+        tools: ['BloodHound', 'SharpHound', 'ldapdomaindump', 'nxc'],
         promptHint: 'Enumerate AD objects: users, groups, computers, GPOs, ACLs, and trust relationships. Prioritize running BloodHound collection.',
     },
     {
@@ -33,7 +33,7 @@ export const pentestPhases: PhaseStep[] = [
         name: '3. Credential Attacks',
         description: 'Kerberoasting, AS-REP Roasting, password spraying, hash capture.',
         techniques: ['kerberos', 'spray', 'responder'],
-        tools: ['Impacket', 'Rubeus', 'Hashcat', 'Responder', 'CrackMapExec'],
+        tools: ['Impacket', 'Rubeus', 'Hashcat', 'Responder', 'NetExec'],
         promptHint: 'Look for Kerberoastable accounts, AS-REP roastable users (no pre-auth), and opportunities for password spraying. Check for LLMNR/NBT-NS poisoning opportunities.',
     },
     {
@@ -49,7 +49,7 @@ export const pentestPhases: PhaseStep[] = [
         name: '5. Lateral Movement',
         description: 'Move between hosts using harvested credentials or tickets.',
         techniques: ['lateral', 'pth', 'ptt', 'wmi', 'psexec'],
-        tools: ['Impacket (psexec/wmiexec/smbexec)', 'CrackMapExec', 'Evil-WinRM'],
+        tools: ['Impacket (psexec/wmiexec/smbexec)', 'NetExec', 'Evil-WinRM'],
         promptHint: 'Use obtained credentials or hashes to move laterally. Suggest WMIExec, SMBExec, or Evil-WinRM based on available access. Always stay within scope.',
     },
     {
@@ -57,7 +57,7 @@ export const pentestPhases: PhaseStep[] = [
         name: '6. MSSQL Attacks',
         description: 'Enumerate and exploit SQL Server instances.',
         techniques: ['mssql'],
-        tools: ['PowerUpSQL', 'Impacket mssqlclient', 'CrackMapExec mssql'],
+        tools: ['PowerUpSQL', 'Impacket mssqlclient', 'NetExec mssql'],
         promptHint: 'Find SQL Server instances, check for linked servers, xp_cmdshell access, and SQL-based privilege escalation paths.',
     },
     {

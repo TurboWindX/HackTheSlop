@@ -11,15 +11,15 @@
 #   - ADCS ESC1 vulnerable template
 #   - GenericAll ACL: carol.white -> svc_sql
 #
-# LAB USE ONLY — Never run on a real domain.
+# TURBO USE ONLY — Never run on a real domain.
 # =============================================================================
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Continue"
 
-$domain      = $env:DOMAIN       # lab.local
-$domainShort = $env:DOMAIN_SHORT  # LAB
+$domain      = $env:DOMAIN       # turbo.lab
+$domainShort = $env:DOMAIN_SHORT  # TURBO
 $adminPass   = $env:ADMIN_PASS    # Vagrant123!
 $domainDN    = ($domain -split '\.' | ForEach-Object { "DC=$_" }) -join ','  # DC=lab,DC=local
 
@@ -532,16 +532,16 @@ Set-Service  -Name Spooler -StartupType Automatic -ErrorAction SilentlyContinue
 Start-Service -Name Spooler -ErrorAction SilentlyContinue
 Write-Host "  [VULN] Print Spooler running on DC01 — PrinterBug / SpoolSample target"
 
-# ── 16. Conditional DNS forwarder for child.lab.local → DC02 ─────────────────
-# Pre-configured so DC01 resolves child.lab.local from the moment DC02 is up
-Write-Host "[*] Adding conditional forwarder: child.lab.local → 192.168.56.11..."
+# ── 16. Conditional DNS forwarder for child.turbo.lab → DC02 ─────────────────
+# Pre-configured so DC01 resolves child.turbo.lab from the moment DC02 is up
+Write-Host "[*] Adding conditional forwarder: child.turbo.lab → 192.168.56.11..."
 try {
     Add-DnsServerConditionalForwarderZone `
-        -Name             "child.lab.local" `
+        -Name             "child.turbo.lab" `
         -MasterServers    "192.168.56.11" `
         -ReplicationScope "Forest" `
         -ErrorAction SilentlyContinue
-    Write-Host "  [+] Forwarder set: child.lab.local → 192.168.56.11 (DC02)"
+    Write-Host "  [+] Forwarder set: child.turbo.lab → 192.168.56.11 (DC02)"
 } catch {
     Write-Host "  [*] Forwarder may already exist (DNS delegation) — OK"
 }

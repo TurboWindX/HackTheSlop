@@ -23,17 +23,41 @@ export type Technique = {
     commands: CommandSuggestion[];
 };
 
+// A single captured credential entry
+export type CredEntry = {
+    id: string;
+    username?: string;
+    domain?: string;
+    password?: string;
+    note?: string;         // e.g. "found in share", "DA"
+};
+
+// A single captured hash entry
+export type HashEntry = {
+    id: string;
+    username?: string;
+    domain?: string;
+    hash: string;
+    hashType: string;      // e.g. "NTLM", "NetNTLMv2", "Kerberos 5 TGS-REP" etc.
+    hashcatMode?: string;  // e.g. "1000", "5600", "13100"
+    note?: string;
+};
+
 // Engagement context — credentials and scope for the active pentest
 export type Engagement = {
     id: string;
     name: string;
-    username: string;       // e.g. alex
-    domain: string;         // e.g. mydomain.local
-    password: string;
-    ntlmHash?: string;      // optional — populate after obtaining hash
+    domain?: string;        // primary domain
     dcIp?: string;          // primary domain controller IP
+    // legacy single-cred fields kept for backward compat (used by AI context)
+    username?: string;
+    password?: string;
+    ntlmHash?: string;
+    // structured loot
+    creds: CredEntry[];
+    hashes: HashEntry[];
     scope: string[];        // CIDRs and individual IPs in scope
-    notes?: string;         // freeform engagement notes
+    notes?: string;
     createdAt: Date;
 };
 
@@ -59,7 +83,7 @@ export type AIMessage = {
 };
 
 export type GuidanceRequest = {
-    engagement: Engagement;
+    engagement: Engagement | null;
     phase?: string;
     userMessage: string;
     bloodhoundFindings?: BloodhoundResult[];
