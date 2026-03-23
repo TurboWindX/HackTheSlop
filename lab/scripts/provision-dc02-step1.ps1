@@ -31,7 +31,13 @@ Get-NetAdapterBinding -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue |
 
 Write-Host "[*] Setting static IP to $dc02Ip..."
 $adapters = Get-NetAdapter | Where-Object { $_.Status -ne 'Disabled' } | Sort-Object ifIndex
-$labIface = $adapters | Select-Object -Skip 1 | Select-Object -First 1
+$labIface = $adapters | Where-Object {
+    $gw = Get-NetRoute -InterfaceAlias $_.Name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue
+    -not $gw
+} | Select-Object -First 1
+if ($null -eq $labIface) {
+    $labIface = $adapters | Select-Object -Skip 1 | Select-Object -First 1
+}
 if ($null -ne $labIface) {
     if ($labIface.Status -ne "Up") {
         Enable-NetAdapter -Name $labIface.Name -Confirm:$false -ErrorAction SilentlyContinue

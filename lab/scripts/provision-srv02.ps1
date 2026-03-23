@@ -27,7 +27,13 @@ $srv02Ip     = $env:SRV02_IP       # 192.168.56.21
 # Sort by ifIndex: lowest = Vagrant NAT adapter (leave it alone)
 Write-Host "[*] Configuring lab network adapter..."
 $adapters = Get-NetAdapter | Sort-Object ifIndex
-$labIface = $adapters | Select-Object -Skip 1 | Select-Object -First 1
+$labIface = $adapters | Where-Object {
+    $gw = Get-NetRoute -InterfaceAlias $_.Name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue
+    -not $gw
+} | Select-Object -First 1
+if ($null -eq $labIface) {
+    $labIface = $adapters | Select-Object -Skip 1 | Select-Object -First 1
+}
 if ($null -ne $labIface) {
     if ($labIface.Status -ne "Up") {
         Enable-NetAdapter -Name $labIface.Name -Confirm:$false -ErrorAction SilentlyContinue

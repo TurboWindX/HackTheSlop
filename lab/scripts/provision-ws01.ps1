@@ -25,7 +25,13 @@ $dcIp        = $env:DC_IP         # 192.168.56.10
 Write-Host "[*] Configuring lab network adapter..."
 $wsIp     = $env:WS_IP    # 192.168.56.30
 $adapters = Get-NetAdapter | Sort-Object ifIndex
-$labIface = $adapters | Select-Object -Skip 1 | Select-Object -First 1
+$labIface = $adapters | Where-Object {
+    $gw = Get-NetRoute -InterfaceAlias $_.Name -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue
+    -not $gw
+} | Select-Object -First 1
+if ($null -eq $labIface) {
+    $labIface = $adapters | Select-Object -Skip 1 | Select-Object -First 1
+}
 if ($null -ne $labIface) {
     if ($labIface.Status -ne "Up") {
         Enable-NetAdapter -Name $labIface.Name -Confirm:$false -ErrorAction SilentlyContinue
@@ -78,7 +84,7 @@ Write-Host "[*] Configuring AutoLogon (cleartext creds in registry)..."
 $winlogon = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
 try {
     Set-ItemProperty $winlogon -Name "AutoAdminLogon"   -Value "1"            -Type String
-    Set-ItemProperty $winlogon -Name "DefaultDomainName" -Value "TURBO"         -Type String
+    Set-ItemProperty $winlogon -Name "DefaultDomainName" -Value $domainShort    -Type String
     Set-ItemProperty $winlogon -Name "DefaultUserName"   -Value "bob.smith"   -Type String
     Set-ItemProperty $winlogon -Name "DefaultPassword"   -Value "Password123!" -Type String
     Write-Host "  [VULN] AutoLogon set: LAB\bob.smith / Password123! (cleartext in registry)"

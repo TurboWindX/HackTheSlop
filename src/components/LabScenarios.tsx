@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { labScenarios, LabScenario } from '../data/labScenarios';
 
 // ── Spoiler component ─────────────────────────────────────────────────────────
@@ -31,6 +31,42 @@ const LabScenarios: React.FC = () => {
             setTimeout(() => setCopied(''), 1500);
         });
     };
+
+    // On scenario select, check whether a job is already running server-side and
+    // reconnect to its buffered log stream so a page refresh doesn't lose output.
+    useEffect(() => {
+        if (!selected) return;
+        let cancelled = false;
+
+        const reconnect = async () => {
+            try {
+                const res = await fetch(`/api/lab/logs?dir=${encodeURIComponent(selected.launchDir)}`);
+                if (!res.ok || !res.body) return;   // 404 = no active job, that's fine
+
+                // Job exists — treat it as a reconnect
+                setLabState('launching');
+                setOutput('');
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                while (!cancelled) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value, { stream: true });
+                    setOutput(prev => prev + chunk);
+                    if (outputRef.current) {
+                        outputRef.current.scrollTop = outputRef.current.scrollHeight;
+                    }
+                }
+                if (!cancelled) setLabState('done');
+            } catch {
+                // Network error — no active job or server not running, silently ignore
+            }
+        };
+
+        reconnect();
+        return () => { cancelled = true; };
+    }, [selected?.launchDir]);
 
     const runVagrant = useCallback(async (scenario: LabScenario, action: 'launch' | 'destroy') => {
         setLabState(action === 'launch' ? 'launching' : 'destroying');

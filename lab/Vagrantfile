@@ -19,7 +19,7 @@
 #   vagrant destroy -f      # wipe everything
 #   vagrant snapshot save clean_lab  # snapshot after first successful provision
 #
-# Lab Network: 192.168.56.0/24 (VirtualBox host-only)
+# Lab Network: 192.168.56.0/24 (host-only — VirtualBox & VMware)
 #   DC01:  192.168.56.10   (Domain Controller, DNS, ADCS)
 #   SRV01: 192.168.56.20   (Member server, SQL Server Express)
 #   WS01:  192.168.56.30   (Windows 10 workstation)
@@ -44,7 +44,7 @@
 VAGRANTFILE_API_VERSION = "2"
 
 DOMAIN       = "turbo.lab"
-DOMAIN_SHORT = "TURBO"
+DOMAIN_SHORT = "TURBOLAB"
 DOMAIN_PASS  = "Vagrant123!"
 DC_IP        = "192.168.56.10"
 DC02_IP      = "192.168.56.11"
@@ -53,7 +53,7 @@ SRV2_IP      = "192.168.56.21"
 WS1_IP       = "192.168.56.30"
 
 CHILD_DOMAIN = "child.turbo.lab"
-CHILD_SHORT  = "CHILD"
+CHILD_SHORT  = "CHILDLAB"
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box_check_update    = false
@@ -64,7 +64,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.define "dc01", primary: true do |dc|
     dc.vm.box      = "StefanScherer/windows_2019"
     dc.vm.hostname = "DC01"
-    dc.vm.network  "private_network", ip: DC_IP, virtualbox__intnet: "lab-net"
+    dc.vm.network  "private_network", ip: DC_IP
 
     dc.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "LAB-DC01"
@@ -78,6 +78,14 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       vb.cpus   = 2
       vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
     end
+
+    # Step 0: Disable IPv6 + set static IP — requires reboot before DCPromo
+    dc.vm.provision "shell",
+      path:   "scripts/provision-dc01-step0.ps1",
+      reboot: true,
+      env: {
+        "DC_IP" => DC_IP,
+      }
 
     # Step 1: Install AD DS + promote — requires reboot
     dc.vm.provision "shell",
@@ -104,7 +112,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.define "srv01" do |srv|
     srv.vm.box      = "StefanScherer/windows_2019"
     srv.vm.hostname = "SRV01"
-    srv.vm.network  "private_network", ip: SRV_IP, virtualbox__intnet: "lab-net"
+    srv.vm.network  "private_network", ip: SRV_IP
 
     srv.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "LAB-SRV01"
@@ -133,7 +141,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.define "ws01" do |ws|
     ws.vm.box      = "StefanScherer/windows_10"
     ws.vm.hostname = "WS01"
-    ws.vm.network  "private_network", ip: WS1_IP, virtualbox__intnet: "lab-net"
+    ws.vm.network  "private_network", ip: WS1_IP
 
     ws.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "LAB-WS01"
@@ -162,7 +170,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.define "dc02" do |dc2|
     dc2.vm.box      = "StefanScherer/windows_2019"
     dc2.vm.hostname = "DC02"
-    dc2.vm.network  "private_network", ip: DC02_IP, virtualbox__intnet: "lab-net"
+    dc2.vm.network  "private_network", ip: DC02_IP
 
     dc2.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "LAB-DC02"
@@ -207,7 +215,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.define "srv02" do |srv2|
     srv2.vm.box      = "StefanScherer/windows_2019"
     srv2.vm.hostname = "SRV02"
-    srv2.vm.network  "private_network", ip: SRV2_IP, virtualbox__intnet: "lab-net"
+    srv2.vm.network  "private_network", ip: SRV2_IP
 
     srv2.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "LAB-SRV02"

@@ -6,6 +6,19 @@ import { spawn } from 'child_process';
 
 const LAB_DIR = path.resolve(__dirname, 'lab');
 
+// ── Per-job log buffer so clients can reconnect after a page refresh ──────────
+interface JobState {
+    buf:    string[];
+    done:   boolean;
+    code:   number | null;
+    action: string;
+    dir:    string;
+    subscribers: Set<any>;
+}
+const jobs = new Map<string, JobState>();  // key = launchDir
+
+function jobKey(dir: string) { return dir; }
+
 function labApiPlugin() {
     return {
         name: 'lab-api',
@@ -33,8 +46,13 @@ function labApiPlugin() {
                             return;
                         }
 
+                        const key = jobKey(launchDir);
                         const cwd = launchDir === '.' ? LAB_DIR : path.join(LAB_DIR, launchDir);
                         const args = url === '/launch' ? ['up'] : ['destroy', '-f'];
+
+                        // Create/replace job state
+                        const job: JobState = { buf: [], done: false, code: null, action: url.slice(1), dir: launchDir, subscribers: new Set() };
+                        jobs.set(key, job);
 
                         res.writeHead(200, {
                             'Content-Type': 'text/plain; charset=utf-8',
@@ -43,18 +61,69 @@ function labApiPlugin() {
                             'X-Content-Type-Options': 'nosniff',
                         });
 
+                        const broadcast = (text: string) => {
+                            job.buf.push(text);
+                            job.subscribers.forEach((s: any) => { try { s.write(text); } catch {} });
+                        };
+
                         const proc = spawn('vagrant', args, { cwd, shell: true });
-                        proc.stdout.on('data', (d: any) => res.write(d.toString()));
-                        proc.stderr.on('data', (d: any) => res.write(d.toString()));
+                        proc.stdout.on('data', (d: any) => broadcast(d.toString()));
+                        proc.stderr.on('data', (d: any) => broadcast(d.toString()));
                         proc.on('close', (code: any) => {
-                            res.write(`\n[Exit code: ${code ?? -1}]\n`);
+                            const msg = `\n[Exit code: ${code ?? -1}]\n`;
+                            broadcast(msg);
+                            job.done = true;
+                            job.code = code ?? -1;
+                            job.subscribers.forEach((s: any) => { try { s.end(); } catch {} });
+                            job.subscribers.clear();
                             res.end();
                         });
                         proc.on('error', (err: any) => {
-                            res.write(`\n[Error] ${err.message}\n`);
+                            const msg = `\n[Error] ${err.message}\n`;
+                            broadcast(msg);
+                            job.done = true;
+                            job.subscribers.forEach((s: any) => { try { s.end(); } catch {} });
+                            job.subscribers.clear();
                             res.end();
                         });
                     });
+                    return;
+                }
+
+                // GET /api/lab/logs?dir=... — replay buffered logs + stream remainder
+                if (req.method === 'GET' && url.startsWith('/logs')) {
+                    const params = new URLSearchParams(url.includes('?') ? url.split('?')[1] : '');
+                    const dir = params.get('dir') ?? '.';
+                    const job = jobs.get(jobKey(dir));
+                    if (!job) {
+                        res.writeHead(404);
+                        res.end('No active job for this dir');
+                        return;
+                    }
+                    res.writeHead(200, {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                        'Cache-Control': 'no-cache',
+                        'Transfer-Encoding': 'chunked',
+                    });
+                    // Replay buffered output
+                    job.buf.forEach((chunk: string) => res.write(chunk));
+                    if (job.done) {
+                        res.end();
+                        return;
+                    }
+                    // Subscribe for future chunks
+                    job.subscribers.add(res);
+                    req.on('close', () => job.subscribers.delete(res));
+                    return;
+                }
+
+                // GET /api/lab/active — list running jobs
+                if (req.method === 'GET' && url === '/active') {
+                    const active = [...jobs.entries()]
+                        .filter(([, j]) => !j.done)
+                        .map(([dir, j]) => ({ dir, action: j.action }));
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(active));
                     return;
                 }
 
@@ -101,5 +170,6 @@ export default defineConfig({
     },
     server: {
         port: 5173,
+        host: true,
     },
 });

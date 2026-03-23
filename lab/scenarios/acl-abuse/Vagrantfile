@@ -24,7 +24,7 @@
 VAGRANTFILE_API_VERSION = "2"
 
 DOMAIN       = "turbo.lab"
-DOMAIN_SHORT = "TURBO"
+DOMAIN_SHORT = "TURBOLAB"
 DOMAIN_PASS  = "Vagrant123!"
 DC_IP        = "192.168.56.10"
 WS1_IP       = "192.168.56.30"
@@ -38,7 +38,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.define "dc01", primary: true do |dc|
     dc.vm.box      = "StefanScherer/windows_2019"
     dc.vm.hostname = "DC01"
-    dc.vm.network  "private_network", ip: DC_IP, virtualbox__intnet: "lab-net"
+    dc.vm.network  "private_network", ip: DC_IP
 
     dc.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "ACL-DC01"
@@ -52,6 +52,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       vb.cpus   = 2
       vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
     end
+
+    dc.vm.provision "shell",
+      path:   "../../scripts/provision-dc01-step0.ps1",
+      reboot: true,
+      env: {
+        "DC_IP" => DC_IP,
+      }
 
     dc.vm.provision "shell",
       path:   "../../scripts/provision-dc01-step1.ps1",
@@ -76,7 +83,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.define "ws01" do |ws|
     ws.vm.box      = "StefanScherer/windows_10"
     ws.vm.hostname = "WS01"
-    ws.vm.network  "private_network", ip: WS1_IP, virtualbox__intnet: "lab-net"
+    ws.vm.network  "private_network", ip: WS1_IP
 
     ws.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "ACL-WS01"
