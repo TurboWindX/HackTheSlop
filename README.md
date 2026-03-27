@@ -1,6 +1,6 @@
 # HackTheSlop
 
-> *Like HackTheBox, but sloppier. And it helps you hack the real ones.*
+> *Sloppy, hacky vibey*
 
 **HackTheSlop** is an all-in-one Active Directory pentesting companion — loot manager, lab builder, AI guide, and attack path finder. It tracks your engagement data, generates ready-to-run attack commands pre-filled with your real credentials, visualizes BloodHound attack paths, and ships with five intentionally vulnerable AD lab scenarios to practice on. All AI runs locally via LM Studio — no data leaves your machine.
 
@@ -35,8 +35,8 @@
 ### 1 — Start LM Studio (do this first)
 
 1. Open **LM Studio**
-2. Download **dolphin-2.9-llama3-8b** (search for it in the Discover tab)
-   - Q8_0 quantization fits comfortably in 12 GB VRAM
+2. Download **dolphin-2.9-llama3-8b** (or better) (search for it in the Discover tab) 
+   - Q8_0 quantization is perfect but Q6 is great, q4 is bare minimum 
 3. Load the model → go to **Local Server** tab → click **Start Server**
    - Default port: `1234` — leave it as-is
 4. *(Optional)* On a second machine: do the same and note its IP
