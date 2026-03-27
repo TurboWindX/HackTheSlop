@@ -19,6 +19,25 @@
 
 ---
 
+## Screenshots
+
+**🎯 Loot**
+![Loot](https://github.com/user-attachments/assets/878edfe1-a95c-47a5-ae88-2f98494ecd82)
+
+**🧙 Sherpa**
+![Sherpa](https://github.com/user-attachments/assets/f2b6a1bf-b2ea-4287-8ff7-d2a027352aac)
+
+**🩸 BloodHound**
+![BloodHound](https://github.com/user-attachments/assets/b382eb6d-d7a0-402c-b56b-c743e9172c8d)
+
+**⚡ Commands**
+![Commands](https://github.com/user-attachments/assets/99e5e78d-4812-4d16-b642-8903565d674d)
+
+**🖥️ Lab**
+![Lab](https://github.com/user-attachments/assets/f7e498ed-351c-4016-8a38-99674ca00297)
+
+---
+
 ## Quick Start
 
 ### Prerequisites (one-time installs)
