@@ -1,5 +1,5 @@
-# =============================================================================
-# DC02 — Step 2: Configure child domain users and vulnerabilities
+﻿# =============================================================================
+# DC02  -  Step 2: Configure child domain users and vulnerabilities
 #
 # Runs AFTER the post-DC-promotion reboot.
 #
@@ -9,12 +9,12 @@
 #   - Child domain admin          (frank.admin)
 #   - Print Spooler enabled       (cross-domain PrinterBug)
 #   - SMB signing disabled
-#   - DNS conditional forwarder   (child → parent resolution)
+#   - DNS conditional forwarder   (child -> parent resolution)
 #
 # Trust: child.turbo.lab is a child domain of turbo.lab
 # Forest attack paths: ExtraSids, trust ticket forging, SID history escalation
 #
-# TURBO USE ONLY — Never run on a real domain.
+# TURBO USE ONLY  -  Never run on a real domain.
 # =============================================================================
 [CmdletBinding()]
 param()
@@ -24,7 +24,7 @@ $ErrorActionPreference = "Continue"
 $parentDomain = $env:PARENT_DOMAIN   # turbo.lab
 $childDomain  = $env:CHILD_DOMAIN    # child.turbo.lab
 $childShort   = $env:CHILD_SHORT     # CHILD
-$adminPass    = $env:ADMIN_PASS      # Vagrant123!
+$adminPass    = $env:ADMIN_PASS      # vagrant
 $dc01Ip       = $env:DC01_IP         # 192.168.56.10
 $domainDN     = ($childDomain -split '\.' | ForEach-Object { "DC=$_" }) -join ','
 
@@ -65,7 +65,7 @@ $users = @(
         Sam  = "eve.child"; Pass = "Password123!"; Path = $userOU
         Desc = "Child Domain User"; ASREP = $false; SPN = $null
     },
-    # Child domain admin — path to ExtraSids forest escalation
+    # Child domain admin  -  path to ExtraSids forest escalation
     [pscustomobject]@{
         Sam  = "frank.admin"; Pass = "Admin123!"; Path = $userOU
         Desc = "Child Domain IT Admin"; ASREP = $false; SPN = $null
@@ -73,13 +73,13 @@ $users = @(
     # [VULN] AS-REP roastable
     [pscustomobject]@{
         Sam  = "grace.temp"; Pass = "Summer2024!"; Path = $userOU
-        Desc = "Temp contractor — Kerberos pre-auth disabled"; ASREP = $true; SPN = $null
+        Desc = "Temp contractor  -  Kerberos pre-auth disabled"; ASREP = $true; SPN = $null
     },
     # [VULN] Kerberoastable + unconstrained delegation
-    # Attack: compromise this account → PrinterBug → steal DC TGT → DCSync
+    # Attack: compromise this account -> PrinterBug -> steal DC TGT -> DCSync
     [pscustomobject]@{
         Sam  = "svc_child_web"; Pass = "Webservice1!"; Path = $svcOU
-        Desc = "Child Web Service — unconstrained delegation"; ASREP = $false
+        Desc = "Child Web Service  -  unconstrained delegation"; ASREP = $false
         SPN  = "HTTP/SRV02.$childDomain"
     }
 )
@@ -99,7 +99,7 @@ foreach ($u in $users) {
             -ErrorAction Stop
         Write-Host "  [+] Created: $($u.Sam)@$childDomain"
     } catch {
-        Write-Host "  [!] $($u.Sam) may already exist — skipping."
+        Write-Host "  [!] $($u.Sam) may already exist  -  skipping."
     }
     if ($u.ASREP) {
         Set-ADAccountControl -Identity $u.Sam -DoesNotRequirePreAuth $true
@@ -124,13 +124,13 @@ Set-ADDefaultDomainPasswordPolicy -Identity $childDomain `
 # Attack path:
 #   1. Get code exec on a host running as svc_child_web
 #   2. Trigger PrinterBug (SpoolSample) against DC01 or DC02
-#   3. DC authenticates to the unconstrained deleg host → TGT captured
-#   4. Pass-the-ticket as DC → DCSync → all hashes
+#   3. DC authenticates to the unconstrained deleg host -> TGT captured
+#   4. Pass-the-ticket as DC -> DCSync -> all hashes
 Write-Host "[*] Setting unconstrained delegation on svc_child_web..."
 try {
     Set-ADUser -Identity "svc_child_web" -TrustedForDelegation $true
     Write-Host "  [VULN] Unconstrained delegation: svc_child_web"
-    Write-Host "         Attack: PrinterBug → capture DC01/DC02 TGT → DCSync"
+    Write-Host "         Attack: PrinterBug -> capture DC01/DC02 TGT -> DCSync"
 } catch {
     Write-Host "  [!] Unconstrained delegation failed: $_"
 }
@@ -147,27 +147,27 @@ Write-Host "  [VULN] SMB signing disabled (NTLM relay possible)"
 Write-Host "[*] Enabling Print Spooler (PrinterBug target)..."
 Set-Service -Name Spooler -StartupType Automatic -ErrorAction SilentlyContinue
 Start-Service -Name Spooler -ErrorAction SilentlyContinue
-Write-Host "  [VULN] Print Spooler running on DC02 — PrinterBug / SpoolSample target"
+Write-Host "  [VULN] Print Spooler running on DC02  -  PrinterBug / SpoolSample target"
 
 # ── 7. DNS conditional forwarder for parent domain ────────────────────────────
 # In a child domain, delegation is auto-created in the parent zone.
 # This forwarder ensures cross-domain resolution works immediately from DC02.
-Write-Host "[*] Adding conditional forwarder: $parentDomain → $dc01Ip..."
+Write-Host "[*] Adding conditional forwarder: $parentDomain -> $dc01Ip..."
 try {
     Add-DnsServerConditionalForwarderZone `
         -Name            $parentDomain `
         -MasterServers   $dc01Ip `
         -ReplicationScope "Domain" `
         -ErrorAction SilentlyContinue
-    Write-Host "  [+] Forwarder set: $parentDomain → $dc01Ip"
+    Write-Host "  [+] Forwarder set: $parentDomain -> $dc01Ip"
 } catch {
-    Write-Host "  [*] Forwarder may already exist (DNS delegation auto-created) — OK"
+    Write-Host "  [*] Forwarder may already exist (DNS delegation auto-created)  -  OK"
 }
 
 # ── Done ───────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "================================================================"
-Write-Host "  DC02 — Child Domain Fully Provisioned"
+Write-Host "  DC02  -  Child Domain Fully Provisioned"
 Write-Host "================================================================"
 Write-Host "  Child Domain:  $childDomain  (CHILD)"
 Write-Host "  Parent Domain: $parentDomain  (LAB)"
@@ -182,9 +182,9 @@ Write-Host "  svc_child_web:     Webservice1!  [Kerberoastable | Unconstrained D
 Write-Host ""
 Write-Host "  Cross-domain attack paths:"
 Write-Host "    1. Compromise frank.admin (Child DA)"
-Write-Host "       Get child krbtgt hash → forge ticket with ParentDomain SID"
+Write-Host "       Get child krbtgt hash -> forge ticket with ParentDomain SID"
 Write-Host "       ExtraSids = Enterprise Admins in turbo.lab"
 Write-Host "    2. PrinterBug (DC01/DC02) + svc_child_web unconstrained delegation"
-Write-Host "       Capture DC TGT → pass-the-ticket → DCSync"
-Write-Host "    3. Trust ticket: child krbtgt → inter-realm TGT → Enterprise Admin"
+Write-Host "       Capture DC TGT -> pass-the-ticket -> DCSync"
+Write-Host "    3. Trust ticket: child krbtgt -> inter-realm TGT -> Enterprise Admin"
 Write-Host "================================================================"

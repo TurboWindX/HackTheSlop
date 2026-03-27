@@ -6,7 +6,6 @@ import BloodhoundAnalyzer from '../components/BloodhoundAnalyzer';
 import CommandSuggester from '../components/CommandSuggester';
 import LabScenarios from '../components/LabScenarios';
 import { engagementService } from '../services/engagementService';
-import { parseBloodhoundResults } from '../services/bloodhoundParser';
 import JSZip from 'jszip';
 
 // ── BloodHound tab — ZIP upload + JSON paste ─────────────────────────────────
@@ -29,9 +28,10 @@ const BloodHoundTab: React.FC<{ onJsonParsed: (json: string) => void }> = ({ onJ
                 const text = await f.async('string');
                 try {
                     const parsed = JSON.parse(text);
-                    // BloodHound CE: each file has { data: [...], meta: {...} }
+                    // BloodHound CE: each file has { data: [...], meta: { type: 'users', … } }
                     if (parsed.data && Array.isArray(parsed.data)) {
-                        parts.push(...parsed.data);
+                        const bhType = parsed.meta?.type ?? '';
+                        parts.push(...parsed.data.map((o: any) => ({ ...o, _bhType: bhType })));
                     } else if (Array.isArray(parsed)) {
                         parts.push(...parsed);
                     } else {
@@ -77,8 +77,6 @@ const BloodHoundTab: React.FC<{ onJsonParsed: (json: string) => void }> = ({ onJ
         setError('');
     };
 
-    const results = rawJson ? parseBloodhoundResults(rawJson) : [];
-
     return (
         <div className="bloodhound-tab">
             <h2>BloodHound Analysis</h2>
@@ -109,7 +107,8 @@ const BloodHoundTab: React.FC<{ onJsonParsed: (json: string) => void }> = ({ onJ
                 />
             </label>
 
-            <BloodhoundAnalyzer results={results} />
+            {/* Pass raw JSON so the analyzer can render both the graph and the node list */}
+            <BloodhoundAnalyzer results={rawJson} />
         </div>
     );
 };

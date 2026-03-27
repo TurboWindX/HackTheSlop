@@ -1,27 +1,27 @@
-# =============================================================================
+﻿# =============================================================================
 # Scenario: Lateral Movement
 # VMs: DC01 + SRV01 + WS01   |  RAM: ~9 GB   |  Provision time: ~45 min
 #
 # Attack techniques covered:
-#   Pass-the-Hash (PTH)     — wmiexec, smbexec, psexec via NT hash
-#   Pass-the-Ticket (PTT)   — inject TGT/TGS, move between hosts
-#   Evil-WinRM              — WinRM on WS01 port 5985 / SRV01
-#   DCOM lateral            — MMC20.Application / ShellWindows
-#   WMI exec                — Invoke-WmiMethod Win32_Process
-#   Remote Scheduled Tasks  — schtasks /s (no hash needed if on same domain)
-#   Remote Service          — sc \\target create + start
-#   MSSQL linked chains     — xp_cmdshell on SRV01 → OS commands as SQL svc
-#   DPAPI credential theft  — WS01 vault: LAB\svc_backup + LAB\carol.white
-#   AutoLogon creds         — WS01 registry: LAB\bob.smith plaintext
-#   Token impersonation     — Incognito / potato attacks post-admin
-#   Creds in shares         — \\SRV01\IT\it-creds.txt
+#   Pass-the-Hash (PTH)     â€” wmiexec, smbexec, psexec via NT hash
+#   Pass-the-Ticket (PTT)   â€” inject TGT/TGS, move between hosts
+#   Evil-WinRM              â€” WinRM on WS01 port 5985 / SRV01
+#   DCOM lateral            â€” MMC20.Application / ShellWindows
+#   WMI exec                â€” Invoke-WmiMethod Win32_Process
+#   Remote Scheduled Tasks  â€” schtasks /s (no hash needed if on same domain)
+#   Remote Service          â€” sc \\target create + start
+#   MSSQL linked chains     â€” xp_cmdshell on SRV01 â†’ OS commands as SQL svc
+#   DPAPI credential theft  â€” WS01 vault: LAB\svc_backup + LAB\carol.white
+#   AutoLogon creds         â€” WS01 registry: LAB\bob.smith plaintext
+#   Token impersonation     â€” Incognito / potato attacks post-admin
+#   Creds in shares         â€” \\SRV01\IT\it-creds.txt
 #
 # Cred chain example:
-#   1. Spray → get alice.jones (weak pass)
-#   2. From alice → read \\SRV01\IT share → sa_lab / Lab12345
-#   3. SA_lab xp_cmdshell → SYSTEM on SRV01
-#   4. PTH SRV01$ → WS01 WinRM (RBCD or local admin)
-#   5. WS01 DPAPI → carol.white hash → GenericAll → full DA
+#   1. Spray â†’ get alice.jones (weak pass)
+#   2. From alice â†’ read \\SRV01\IT share â†’ sa_lab / Lab12345
+#   3. SA_lab xp_cmdshell â†’ SYSTEM on SRV01
+#   4. PTH SRV01$ â†’ WS01 WinRM (RBCD or local admin)
+#   5. WS01 DPAPI â†’ carol.white hash â†’ GenericAll â†’ full DA
 #
 # Usage:
 #   From this directory:  vagrant up
@@ -32,7 +32,7 @@ VAGRANTFILE_API_VERSION = "2"
 
 DOMAIN       = "turbo.lab"
 DOMAIN_SHORT = "TURBOLAB"
-DOMAIN_PASS  = "Vagrant123!"
+DOMAIN_PASS  = "vagrant"
 DC_IP        = "192.168.56.10"
 SRV_IP       = "192.168.56.20"
 WS1_IP       = "192.168.56.30"
@@ -41,12 +41,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box_check_update   = false
   config.winrm.transport       = :negotiate
   config.winrm.basic_auth_only = false
+  config.vm.boot_timeout        = 1200
+  config.winrm.timeout          = 7200
+  config.winrm.retry_limit      = 60
+  config.winrm.retry_delay      = 10
 
-  # ── DC01: Domain Controller ──────────────────────────────────────────────────
+  # â”€â”€ DC01: Domain Controller â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "dc01", primary: true do |dc|
     dc.vm.box      = "StefanScherer/windows_2019"
-    dc.vm.hostname = "DC01"
     dc.vm.network  "private_network", ip: DC_IP
+    dc.vm.synced_folder ".", "/vagrant", disabled: true
 
     dc.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "LAT-DC01"
@@ -61,36 +65,23 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
     end
 
-    dc.vm.provision "shell",
-      path:   "../../scripts/provision-dc01-step0.ps1",
-      reboot: true,
-      env: {
-        "DC_IP" => DC_IP,
-      }
+    dc.vm.provision "file",
+      source:      "../../scripts/provision-dc01-step2.ps1",
+      destination: "C:/Windows/Temp/provision-dc01-step2.ps1"
 
     dc.vm.provision "shell",
-      path:   "../../scripts/provision-dc01-step1.ps1",
-      reboot: true,
+      path:   "../../scripts/provision-dc01-bootstrap.ps1",
       env: {
         "DOMAIN"       => DOMAIN,
         "DOMAIN_SHORT" => DOMAIN_SHORT,
         "ADMIN_PASS"   => DOMAIN_PASS,
         "DC_IP"        => DC_IP,
       }
-
-    dc.vm.provision "shell",
-      path: "../../scripts/provision-dc01-step2.ps1",
-      env: {
-        "DOMAIN"       => DOMAIN,
-        "DOMAIN_SHORT" => DOMAIN_SHORT,
-        "ADMIN_PASS"   => DOMAIN_PASS,
-      }
   end
 
-  # ── SRV01: Member server (SQL + IIS + share) ─────────────────────────────────
+  # â”€â”€ SRV01: Member server (SQL + IIS + share) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "srv01" do |srv|
     srv.vm.box      = "StefanScherer/windows_2019"
-    srv.vm.hostname = "SRV01"
     srv.vm.network  "private_network", ip: SRV_IP
 
     srv.vm.provider "vmware_desktop" do |v|
@@ -116,10 +107,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       }
   end
 
-  # ── WS01: Domain workstation (DPAPI vault, AutoLogon) ────────────────────────
+  # â”€â”€ WS01: Domain workstation (DPAPI vault, AutoLogon) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "ws01" do |ws|
     ws.vm.box      = "StefanScherer/windows_10"
-    ws.vm.hostname = "WS01"
     ws.vm.network  "private_network", ip: WS1_IP
 
     ws.vm.provider "vmware_desktop" do |v|

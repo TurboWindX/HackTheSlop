@@ -1,5 +1,5 @@
-# =============================================================================
-# DC02 — Step 1: Install AD DS and promote as child domain controller
+﻿# =============================================================================
+# DC02  -  Step 1: Install AD DS and promote as child domain controller
 #
 # Creates child.turbo.lab as a child domain of turbo.lab.
 # Vagrant triggers reboot: true after this script completes.
@@ -12,14 +12,21 @@
 [CmdletBinding()]
 param()
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
+
+# ── Sentinel guard: skip if already completed ─────────────────────────────────
+if (Test-Path "C:\vagrant-dc02-step1-done") {
+    Write-Host "[*] DC02 Step 1 already complete, skipping."
+    exit 0
+}
 
 $parentDomain = $env:PARENT_DOMAIN  # turbo.lab
 $childDomain  = $env:CHILD_DOMAIN   # child.turbo.lab
 $childShort   = $env:CHILD_SHORT    # CHILD
-$adminPass    = $env:ADMIN_PASS     # Vagrant123!
+$adminPass    = $env:ADMIN_PASS     # vagrant (box default)
 $dc02Ip       = $env:DC02_IP        # 192.168.56.11
 $dc01Ip       = $env:DC01_IP        # 192.168.56.10
+$parentShort  = ($parentDomain.Split('.')[0]).ToUpper()  # TURBO
 
 # ── Disable IPv6 globally via registry (same fix as DC01) ─────────────────────
 Write-Host "[*] Disabling IPv6 globally via registry..."
@@ -68,7 +75,7 @@ while ((Get-Date) -lt $deadline) {
     if (Test-Connection -ComputerName $dc01Ip -Count 1 -Quiet) {
         try {
             Resolve-DnsName $parentDomain -Server $dc01Ip -ErrorAction Stop | Out-Null
-            Write-Host "[+] DC01 reachable — $parentDomain resolves."
+            Write-Host "[+] DC01 reachable  -  $parentDomain resolves."
             break
         } catch {
             Write-Host "  [*] DNS not ready on DC01 yet, retrying in 15s..."
@@ -79,17 +86,35 @@ while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 15
 }
 
+# ── Rename computer ───────────────────────────────────────────────────────────
+if ($env:COMPUTERNAME -ne "DC02") {
+    Write-Host "[*] Renaming computer to DC02..."
+    Rename-Computer -NewName "DC02" -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host "[*] Installing AD DS + DNS roles..."
 Install-WindowsFeature -Name AD-Domain-Services, DNS -IncludeManagementTools | Out-Null
+
+# Cancel any pending restart that Install-WindowsFeature may have queued
+try { & "$env:SystemRoot\System32\shutdown.exe" /a 2>&1 | Out-Null } catch {}
+Start-Sleep -Seconds 3
 
 Clear-DnsClientCache -ErrorAction SilentlyContinue
 
 Write-Host "[*] Promoting as child domain controller: $childDomain (child of $parentDomain)..."
 $safeModePass = ConvertTo-SecureString $adminPass -AsPlainText -Force
 $parentCred   = New-Object PSCredential(
-    "LAB\Administrator",
+    "$parentShort\Administrator",
     (ConvertTo-SecureString $adminPass -AsPlainText -Force)
 )
+
+# Watchdog: keep aborting pending restarts every 5 s while DCPromo runs
+$watchdog = Start-Job -ScriptBlock {
+    for ($i = 0; $i -lt 60; $i++) {
+        Start-Sleep -Seconds 5
+        try { & "$env:SystemRoot\System32\shutdown.exe" /a 2>&1 | Out-Null } catch {}
+    }
+}
 
 Install-ADDSDomain `
     -NewDomainName                 "child" `
@@ -104,4 +129,12 @@ Install-ADDSDomain `
     -Force `
     -NoRebootOnCompletion | Out-Null
 
-Write-Host "[+] Child DC promotion complete ($childDomain). Vagrant will now reboot..."
+Stop-Job    $watchdog -ErrorAction SilentlyContinue
+Remove-Job  $watchdog -ErrorAction SilentlyContinue
+# One final abort in case DCPromo queued a restart at its very end
+try { & "$env:SystemRoot\System32\shutdown.exe" /a 2>&1 | Out-Null } catch {}
+
+Write-Host "[+] Child DC promotion complete ($childDomain). Rebooting in 5s..."
+New-Item -Path "C:\vagrant-dc02-step1-done" -ItemType File -Force | Out-Null
+& "$env:SystemRoot\System32\shutdown.exe" /r /t 5
+exit 0

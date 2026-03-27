@@ -1,8 +1,8 @@
-# =============================================================================
-# LAB — Mini Active Directory Testing Environment
+﻿# =============================================================================
+# LAB â€” Mini Active Directory Testing Environment
 # 3 VMs: DC01 | SRV01 (MSSQL) | WS01 (Win10)
 #
-# LAB USE ONLY — intentionally misconfigured for pentest training.
+# LAB USE ONLY â€” intentionally misconfigured for pentest training.
 # NEVER deploy these scripts on a real network.
 #
 # Requirements:
@@ -19,7 +19,7 @@
 #   vagrant destroy -f      # wipe everything
 #   vagrant snapshot save clean_lab  # snapshot after first successful provision
 #
-# Lab Network: 192.168.56.0/24 (host-only — VirtualBox & VMware)
+# Lab Network: 192.168.56.0/24 (host-only â€” VirtualBox & VMware)
 #   DC01:  192.168.56.10   (Domain Controller, DNS, ADCS)
 #   SRV01: 192.168.56.20   (Member server, SQL Server Express)
 #   WS01:  192.168.56.30   (Windows 10 workstation)
@@ -30,22 +30,24 @@
 #   bob.smith:      Password123!
 #   carol.white:    Summer2024!    (IT Admin, GenericAll over svc_sql)
 #   dave.brown:     Password123!   (password in AD Description field)
-#   svc_sql:        Sqlpass1!      (Kerberoastable — MSSQLSvc SPN)
+#   svc_sql:        Sqlpass1!      (Kerberoastable â€” MSSQLSvc SPN)
 #   svc_backup:     Backup123!     (Kerberoastable)
-#   svc_iis:        IISservice1!   (Kerberoastable — HTTP SPN)
+#   svc_iis:        IISservice1!   (Kerberoastable â€” HTTP SPN)
 # =============================================================================
 
 # =============================================================================
-# Provider selection:
-#   VMware (recommended) — vagrant up                          (uses vmware_desktop)
-#   VirtualBox (fallback) — VAGRANT_DEFAULT_PROVIDER=virtualbox vagrant up
+# Provider selection â€” change PROVIDER to match your hypervisor:
+#   "vmware_desktop"  â€” VMware Workstation / Fusion (recommended)
+#   "virtualbox"      â€” VirtualBox (free, widely available)
 # =============================================================================
+PROVIDER = "vmware_desktop"
+ENV['VAGRANT_DEFAULT_PROVIDER'] = PROVIDER
 
 VAGRANTFILE_API_VERSION = "2"
 
 DOMAIN       = "turbo.lab"
 DOMAIN_SHORT = "TURBOLAB"
-DOMAIN_PASS  = "Vagrant123!"
+DOMAIN_PASS  = "vagrant"
 DC_IP        = "192.168.56.10"
 DC02_IP      = "192.168.56.11"
 SRV_IP       = "192.168.56.20"
@@ -59,12 +61,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box_check_update    = false
   config.winrm.transport        = :negotiate
   config.winrm.basic_auth_only  = false
+  config.vm.boot_timeout        = 1200
+  config.winrm.timeout          = 7200
+  config.winrm.retry_limit      = 60
+  config.winrm.retry_delay      = 10
 
-  # ── DC01: Domain Controller + DNS + ADCS ──────────────────────────────────
+  # â”€â”€ DC01: Domain Controller + DNS + ADCS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "dc01", primary: true do |dc|
     dc.vm.box      = "StefanScherer/windows_2019"
-    dc.vm.hostname = "DC01"
     dc.vm.network  "private_network", ip: DC_IP
+    dc.vm.synced_folder ".", "/vagrant", disabled: true
 
     dc.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "LAB-DC01"
@@ -79,39 +85,24 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
     end
 
-    # Step 0: Disable IPv6 + set static IP — requires reboot before DCPromo
-    dc.vm.provision "shell",
-      path:   "scripts/provision-dc01-step0.ps1",
-      reboot: true,
-      env: {
-        "DC_IP" => DC_IP,
-      }
+    dc.vm.provision "file",
+      source:      "scripts/provision-dc01-step2.ps1",
+      destination: "C:/Windows/Temp/provision-dc01-step2.ps1"
 
-    # Step 1: Install AD DS + promote — requires reboot
+    # Bootstrap: Disable IPv6 + static IP + AD DS promote - reboots managed internally
     dc.vm.provision "shell",
-      path:   "scripts/provision-dc01-step1.ps1",
-      reboot: true,
+      path:   "scripts/provision-dc01-bootstrap.ps1",
       env: {
         "DOMAIN"       => DOMAIN,
         "DOMAIN_SHORT" => DOMAIN_SHORT,
         "ADMIN_PASS"   => DOMAIN_PASS,
         "DC_IP"        => DC_IP,
       }
-
-    # Step 2: After reboot — users, ADCS, intentional vulns
-    dc.vm.provision "shell",
-      path: "scripts/provision-dc01-step2.ps1",
-      env: {
-        "DOMAIN"       => DOMAIN,
-        "DOMAIN_SHORT" => DOMAIN_SHORT,
-        "ADMIN_PASS"   => DOMAIN_PASS,
-      }
   end
 
-  # ── SRV01: Member server with SQL Server Express + file share ─────────────
+  # â”€â”€ SRV01: Member server with SQL Server Express + file share â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "srv01" do |srv|
     srv.vm.box      = "StefanScherer/windows_2019"
-    srv.vm.hostname = "SRV01"
     srv.vm.network  "private_network", ip: SRV_IP
 
     srv.vm.provider "vmware_desktop" do |v|
@@ -137,10 +128,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       }
   end
 
-  # ── WS01: Windows 10 workstation ──────────────────────────────────────────
+  # â”€â”€ WS01: Windows 10 workstation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "ws01" do |ws|
     ws.vm.box      = "StefanScherer/windows_10"
-    ws.vm.hostname = "WS01"
     ws.vm.network  "private_network", ip: WS1_IP
 
     ws.vm.provider "vmware_desktop" do |v|
@@ -166,11 +156,11 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       }
   end
 
-  # ── DC02: Child Domain Controller (child.turbo.lab) ─────────────────────────────
+  # â”€â”€ DC02: Child Domain Controller (child.turbo.lab) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "dc02" do |dc2|
     dc2.vm.box      = "StefanScherer/windows_2019"
-    dc2.vm.hostname = "DC02"
     dc2.vm.network  "private_network", ip: DC02_IP
+    dc2.vm.synced_folder ".", "/vagrant", disabled: true
 
     dc2.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "LAB-DC02"
@@ -185,10 +175,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
     end
 
-    # Step 1: Promote as child DC — requires reboot
+    # Step 1: Promote as child DC â€” requires reboot
     dc2.vm.provision "shell",
       path:   "scripts/provision-dc02-step1.ps1",
-      reboot: true,
       env: {
         "PARENT_DOMAIN" => DOMAIN,
         "CHILD_DOMAIN"  => CHILD_DOMAIN,
@@ -211,10 +200,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       }
   end
 
-  # ── SRV02: Child domain member server (IIS + PrinterBug) ─────────────────────
+  # â”€â”€ SRV02: Child domain member server (IIS + PrinterBug) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "srv02" do |srv2|
     srv2.vm.box      = "StefanScherer/windows_2019"
-    srv2.vm.hostname = "SRV02"
     srv2.vm.network  "private_network", ip: SRV2_IP
 
     srv2.vm.provider "vmware_desktop" do |v|

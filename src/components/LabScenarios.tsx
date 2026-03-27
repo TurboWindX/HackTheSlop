@@ -16,9 +16,11 @@ const Spoiler: React.FC<{ text: string }> = ({ text }) => {
 };
 
 type LabState = 'idle' | 'launching' | 'destroying' | 'done' | 'error';
+type Provider = 'vmware_desktop' | 'virtualbox';
 
 const LabScenarios: React.FC = () => {
     const [selected, setSelected] = useState<LabScenario | null>(null);
+    const [provider, setProvider] = useState<Provider>('vmware_desktop');
     const [copied, setCopied] = useState('');
     const [labState, setLabState] = useState<LabState>('idle');
     const [output, setOutput] = useState('');
@@ -77,7 +79,7 @@ const LabScenarios: React.FC = () => {
             const res = await fetch(`/api/lab/${action}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ launchDir: scenario.launchDir }),
+                body: JSON.stringify({ launchDir: scenario.launchDir, provider }),
             });
 
             if (!res.ok || !res.body) {
@@ -118,7 +120,20 @@ const LabScenarios: React.FC = () => {
     return (
         <div className="lab-scenarios">
             <div className="lab-header">
-                <h2>AD Lab Scenarios</h2>
+                <div className="lab-header-top">
+                    <h2>AD Lab Scenarios</h2>
+                    <div className="provider-toggle">
+                        <span className="provider-label">Hypervisor</span>
+                        <button
+                            className={`provider-btn ${provider === 'vmware_desktop' ? 'active' : ''}`}
+                            onClick={() => setProvider('vmware_desktop')}
+                        >VMware</button>
+                        <button
+                            className={`provider-btn ${provider === 'virtualbox' ? 'active' : ''}`}
+                            onClick={() => setProvider('virtualbox')}
+                        >VirtualBox</button>
+                    </div>
+                </div>
                 <p className="lab-subtitle">
                     Select a focused scenario to spin up — or use the interactive launcher: <code>cd lab &amp;&amp; .\launch.ps1</code>
                 </p>

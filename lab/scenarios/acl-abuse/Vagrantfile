@@ -1,20 +1,20 @@
-# =============================================================================
+﻿# =============================================================================
 # Scenario: ACL Abuse
 # VMs: DC01 + WS01   |  RAM: ~6 GB   |  Provision time: ~25 min
 #
 # Attack techniques covered:
-#   GenericAll          — carol.white → svc_sql (reset pass, set SPN, more)
-#   ForceChangePassword — helpdesk → alice.jones, bob.smith
-#   DCSync              — bob.smith (DS-Replication-Get-Changes*)
+#   GenericAll          â€” carol.white â†’ svc_sql (reset pass, set SPN, more)
+#   ForceChangePassword â€” helpdesk â†’ alice.jones, bob.smith
+#   DCSync              â€” bob.smith (DS-Replication-Get-Changes*)
 #                         secretsdump.py 'LAB/bob.smith:Password123!@192.168.56.10'
-#   AdminSDHolder       — carol.white GenericAll on AdminSDHolder container
+#   AdminSDHolder       â€” carol.white GenericAll on AdminSDHolder container
 #                         After SDProp (~60 min): control all DA-protected objects
-#   WriteDACL (via DC)  — escalate to WriteDACL on domain root → grant DCSync
-#   GPO abuse           — carol.white (IT Admins) GenericWrite on LabSecurityPolicy
-#                         Linked to OU=Corp → code exec on all joined machines
-#   RBCD                — SRV01$ has msDS-AllowedToActOnBehalfOfOtherIdentity on WS01
-#                         Relay/coerce → RBCD → impersonate DA to CIFS/WS01
-#   AddMember (via GenericAll) — carol.white resets svc_sql → adds to DA group
+#   WriteDACL (via DC)  â€” escalate to WriteDACL on domain root â†’ grant DCSync
+#   GPO abuse           â€” carol.white (IT Admins) GenericWrite on LabSecurityPolicy
+#                         Linked to OU=Corp â†’ code exec on all joined machines
+#   RBCD                â€” SRV01$ has msDS-AllowedToActOnBehalfOfOtherIdentity on WS01
+#                         Relay/coerce â†’ RBCD â†’ impersonate DA to CIFS/WS01
+#   AddMember (via GenericAll) â€” carol.white resets svc_sql â†’ adds to DA group
 #
 # Usage:
 #   From this directory:  vagrant up
@@ -25,7 +25,7 @@ VAGRANTFILE_API_VERSION = "2"
 
 DOMAIN       = "turbo.lab"
 DOMAIN_SHORT = "TURBOLAB"
-DOMAIN_PASS  = "Vagrant123!"
+DOMAIN_PASS  = "vagrant"
 DC_IP        = "192.168.56.10"
 WS1_IP       = "192.168.56.30"
 
@@ -33,12 +33,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box_check_update   = false
   config.winrm.transport       = :negotiate
   config.winrm.basic_auth_only = false
+  config.vm.boot_timeout        = 1200
+  config.winrm.timeout          = 7200
+  config.winrm.retry_limit      = 60
+  config.winrm.retry_delay      = 10
 
-  # ── DC01: Domain Controller ──────────────────────────────────────────────────
+  # â”€â”€ DC01: Domain Controller â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "dc01", primary: true do |dc|
     dc.vm.box      = "StefanScherer/windows_2019"
-    dc.vm.hostname = "DC01"
     dc.vm.network  "private_network", ip: DC_IP
+    dc.vm.synced_folder ".", "/vagrant", disabled: true
 
     dc.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "ACL-DC01"
@@ -53,36 +57,23 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
     end
 
-    dc.vm.provision "shell",
-      path:   "../../scripts/provision-dc01-step0.ps1",
-      reboot: true,
-      env: {
-        "DC_IP" => DC_IP,
-      }
+    dc.vm.provision "file",
+      source:      "../../scripts/provision-dc01-step2.ps1",
+      destination: "C:/Windows/Temp/provision-dc01-step2.ps1"
 
     dc.vm.provision "shell",
-      path:   "../../scripts/provision-dc01-step1.ps1",
-      reboot: true,
+      path:   "../../scripts/provision-dc01-bootstrap.ps1",
       env: {
         "DOMAIN"       => DOMAIN,
         "DOMAIN_SHORT" => DOMAIN_SHORT,
         "ADMIN_PASS"   => DOMAIN_PASS,
         "DC_IP"        => DC_IP,
       }
-
-    dc.vm.provision "shell",
-      path: "../../scripts/provision-dc01-step2.ps1",
-      env: {
-        "DOMAIN"       => DOMAIN,
-        "DOMAIN_SHORT" => DOMAIN_SHORT,
-        "ADMIN_PASS"   => DOMAIN_PASS,
-      }
   end
 
-  # ── WS01: Domain workstation ─────────────────────────────────────────────────
+  # â”€â”€ WS01: Domain workstation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "ws01" do |ws|
     ws.vm.box      = "StefanScherer/windows_10"
-    ws.vm.hostname = "WS01"
     ws.vm.network  "private_network", ip: WS1_IP
 
     ws.vm.provider "vmware_desktop" do |v|

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AIMessage, Engagement } from '../types';
 import { aiService } from '../services/aiService';
+import { braveSearch, formatResultsForPrompt } from '../services/webSearchService';
 import { pentestPhases } from '../data/phases';
 
 interface GuidanceChatProps {
@@ -87,6 +88,8 @@ const GuidanceChat: React.FC<GuidanceChatProps> = ({ engagement, bloodhoundJson 
     const [input, setInput]                 = useState('');
     const [selectedPhase, setSelectedPhase] = useState(() => localStorage.getItem(PHASE_STORAGE_KEY) ?? '');
     const [loading, setLoading]             = useState(false);
+    const [webSearch, setWebSearch]         = useState(false);
+    const [searching, setSearching]         = useState(false);
     const [error, setError]                 = useState<string | null>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -117,10 +120,26 @@ const GuidanceChat: React.FC<GuidanceChatProps> = ({ engagement, bloodhoundJson 
 
         try {
             const phase = pentestPhases.find(p => p.id === selectedPhase);
+
+            let finalMessage = userText;
+            if (webSearch) {
+                setSearching(true);
+                try {
+                    const results = await braveSearch(userText);
+                    if (results.length) {
+                        finalMessage = formatResultsForPrompt(results) + userText;
+                    }
+                } catch {
+                    // Search failed — continue without results
+                } finally {
+                    setSearching(false);
+                }
+            }
+
             const reply = await aiService.getGuidance({
                 engagement,
                 phase: phase?.name,
-                userMessage: userText,
+                userMessage: finalMessage,
                 conversationHistory: messages,
             });
 
@@ -186,7 +205,7 @@ const GuidanceChat: React.FC<GuidanceChatProps> = ({ engagement, bloodhoundJson 
                 {loading && (
                     <div className="chat-message assistant loading">
                         <span className="role-label">🧙 Sherpa</span>
-                        <span className="dots">Thinking…</span>
+                        <span className="dots">{searching ? 'Searching web…' : 'Thinking…'}</span>
                     </div>
                 )}
                 {error && (
@@ -206,13 +225,23 @@ const GuidanceChat: React.FC<GuidanceChatProps> = ({ engagement, bloodhoundJson 
                     rows={3}
                     disabled={loading}
                 />
-                <button
-                    className="btn-primary send-btn"
-                    onClick={() => sendMessage()}
-                    disabled={loading || !input.trim()}
-                >
-                    Send
-                </button>
+                <div className="chat-input-actions">
+                    <button
+                        className={`btn-web-search ${webSearch ? 'active' : ''}`}
+                        onClick={() => setWebSearch(v => !v)}
+                        title={webSearch ? 'Web search ON — results will be injected as context' : 'Web search OFF'}
+                        disabled={loading}
+                    >
+                        🔍
+                    </button>
+                    <button
+                        className="btn-primary send-btn"
+                        onClick={() => sendMessage()}
+                        disabled={loading || !input.trim()}
+                    >
+                        Send
+                    </button>
+                </div>
             </div>
         </div>
     );

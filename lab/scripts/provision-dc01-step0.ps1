@@ -12,6 +12,12 @@ param()
 
 $ErrorActionPreference = "Continue"
 
+# ── Sentinel guard: skip if already completed ─────────────────────────────────
+if (Test-Path "C:\vagrant-step0-done") {
+    Write-Host "[*] Step 0 already complete, skipping."
+    exit 0
+}
+
 $dcIp = $env:DC_IP   # 192.168.56.10
 
 # ── Disable IPv6 globally via registry ────────────────────────────────────────
@@ -50,4 +56,15 @@ if ($null -ne $labIface) {
     Write-Host "[!] No secondary adapter found - skipping static IP"
 }
 
-Write-Host "[+] Step 0 complete. Vagrant will reboot now..."
+# ── Rename computer ───────────────────────────────────────────────────────────
+# Done here (before DCPromo) so AD registers the correct machine name.
+# The rename takes effect on the upcoming reboot.
+if ($env:COMPUTERNAME -ne "DC01") {
+    Write-Host "[*] Renaming computer to DC01..."
+    Rename-Computer -NewName "DC01" -Force -ErrorAction SilentlyContinue
+}
+
+Write-Host "[+] Step 0 complete. Rebooting in 5s..."
+New-Item -Path "C:\vagrant-step0-done" -ItemType File -Force | Out-Null
+& "$env:SystemRoot\System32\shutdown.exe" /r /t 5
+exit 0

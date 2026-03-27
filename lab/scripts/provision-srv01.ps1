@@ -1,9 +1,9 @@
-# =============================================================================
-# SRV01 — Member Server
+﻿# =============================================================================
+# SRV01  -  Member Server
 #
 # - Joins the lab domain
 # - Installs SQL Server Express via Chocolatey (free, ~500MB download)
-# - Enables xp_cmdshell (intentionally insecure — for MSSQL attack practice)
+# - Enables xp_cmdshell (intentionally insecure  -  for MSSQL attack practice)
 # - Disables SMB signing (enables relay attacks)
 # - Creates a world-readable file share with a fake credentials file
 #
@@ -16,8 +16,14 @@ $ErrorActionPreference = "Continue"
 
 $domain      = $env:DOMAIN       # turbo.lab
 $domainShort = $env:DOMAIN_SHORT  # TURBO
-$adminPass   = $env:ADMIN_PASS    # Vagrant123!
+$adminPass   = $env:ADMIN_PASS    # vagrant
 $dcIp        = $env:DC_IP         # 192.168.56.10
+
+# ── Rename computer (takes effect at the Restart-Computer at end of this script) ──
+if ($env:COMPUTERNAME -ne "SRV01") {
+    Write-Host "[*] Renaming computer to SRV01..."
+    Rename-Computer -NewName "SRV01" -Force -ErrorAction SilentlyContinue
+}
 
 # ── Configure lab network adapter (static IP + DNS) ─────────────────────────
 # Sort by ifIndex: lowest = Vagrant NAT adapter (leave it alone).
@@ -51,7 +57,7 @@ Write-Host "[*] DNS pointed at DC ($dcIp)..."
 
 # ── Wait for DC to be reachable ───────────────────────────────────────────────
 Write-Host "[*] Waiting for DC to be reachable and DNS to resolve $domain..."
-$deadline = (Get-Date).AddMinutes(15)
+$deadline = (Get-Date).AddMinutes(60)
 while ((Get-Date) -lt $deadline) {
     if (Test-Connection -ComputerName $dcIp -Count 1 -Quiet) {
         try {
@@ -59,8 +65,10 @@ while ((Get-Date) -lt $deadline) {
             Write-Host "[+] DC reachable and DNS resolves."
             break
         } catch {
-            Write-Host "  [*] DNS not ready yet, retrying..."
+            Write-Host "  [*] DC ping OK but DNS not ready yet ($dcIp)... $(Get-Date -Format 'HH:mm:ss')"
         }
+    } else {
+        Write-Host "  [*] DC not pingable yet ($dcIp)... $(Get-Date -Format 'HH:mm:ss')"
     }
     Start-Sleep -Seconds 15
 }
@@ -90,7 +98,7 @@ try {
 }
 
 # ── Install SQL Server Express ────────────────────────────────────────────────
-# Free edition — ~500MB download. Runs as LAB\svc_sql.
+# Free edition  -  ~500MB download. Runs as LAB\svc_sql.
 Write-Host "[*] Installing SQL Server Express (this may take 5-10 minutes)..."
 try {
     choco install sql-server-express --yes --no-progress 2>&1
@@ -117,7 +125,7 @@ $sqlcmdPath = Get-ChildItem "C:\Program Files\Microsoft SQL Server" -Recurse -Fi
 if ($sqlcmdPath) {
     Write-Host "[*] Configuring SQL Server..."
 
-    # [VULN] Enable xp_cmdshell — allows OS command execution from SQL
+    # [VULN] Enable xp_cmdshell  -  allows OS command execution from SQL
     # [VULN] Enable remote access
     $configSql = @"
 EXEC sp_configure 'show advanced options', 1; RECONFIGURE;
@@ -149,7 +157,7 @@ END
         Restart-Service $sqlSvc -Force -ErrorAction SilentlyContinue
     }
 } else {
-    Write-Host "[!] sqlcmd not found — SQL config skipped. SQL may not have installed correctly."
+    Write-Host "[!] sqlcmd not found  -  SQL config skipped. SQL may not have installed correctly."
 }
 
 # ── Disable SMB signing ───────────────────────────────────────────────────────
@@ -160,7 +168,7 @@ Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameter
 Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "EnableSecuritySignature"  -Value 0
 # ── Install IIS with Windows Authentication (NTLM relay target) ───────────────
 # [VULN] Any user or computer that hits this site triggers NTLM auth
-# Attack: Responder MitM + ntlmrelayx → relay to LDAP/SMB/ADCS
+# Attack: Responder MitM + ntlmrelayx -> relay to LDAP/SMB/ADCS
 Write-Host "[*] Installing IIS with Windows Authentication..."
 Install-WindowsFeature -Name `
     Web-Server, Web-WebServer, Web-Common-Http, Web-Default-Doc, Web-Http-Errors, `
@@ -173,7 +181,7 @@ New-Item -ItemType Directory -Path $sitePath -Force | Out-Null
 @"
 <!DOCTYPE html>
 <html><body>
-<h1>LAB Corporate Intranet — SRV01</h1>
+<h1>LAB Corporate Intranet  -  SRV01</h1>
 <p>Internal portal. Windows Authentication required.</p>
 </body></html>
 "@ | Set-Content -Path "$sitePath\index.html"
@@ -190,7 +198,7 @@ try {
         -Filter "//security/authentication/windowsAuthentication" `
         -Name "enabled" -Value $true `
         -PSPath "IIS:\Sites\Intranet" -ErrorAction SilentlyContinue
-    Write-Host "  [VULN] IIS on port 80 with Windows Auth — NTLM relay target"
+    Write-Host "  [VULN] IIS on port 80 with Windows Auth  -  NTLM relay target"
     Write-Host "         Attack: ntlmrelayx -t ldap://192.168.56.10 --delegate-access"
 } catch {
     Write-Host "  [!] IIS site setup failed: $_"
@@ -201,7 +209,7 @@ try {
 Write-Host "[*] Enabling Print Spooler (PrinterBug target)..."
 Set-Service  -Name Spooler -StartupType Automatic -ErrorAction SilentlyContinue
 Start-Service -Name Spooler -ErrorAction SilentlyContinue
-Write-Host "  [VULN] Print Spooler running — SpoolSample / MS-RPRN coercion target"
+Write-Host "  [VULN] Print Spooler running  -  SpoolSample / MS-RPRN coercion target"
 # ── Create a world-readable share with a fake creds file ─────────────────────
 # [VULN] Common lab finding: credentials in accessible file shares
 Write-Host "[*] Creating IT share with 'credentials' file..."
@@ -218,5 +226,6 @@ New-SmbShare -Name "IT" -Path $sharePath -FullAccess "Everyone" -ErrorAction Sil
 Write-Host "  [VULN] Share \\SRV01\IT created with credentials file"
 
 # ── Reboot to complete domain join ────────────────────────────────────────────
-Write-Host "[+] SRV01 provisioning complete. Rebooting to finalize domain join..."
-Restart-Computer -Force
+Write-Host "[+] SRV01 provisioning complete. Rebooting in 5s to finalize domain join..."
+& "$env:SystemRoot\System32\shutdown.exe" /r /t 5
+exit 0

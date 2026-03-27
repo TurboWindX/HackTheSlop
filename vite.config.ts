@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -38,13 +38,17 @@ function labApiPlugin() {
                     req.on('data', (chunk: any) => { body += chunk.toString(); });
                     req.on('end', () => {
                         let launchDir: string;
+                        let provider: string = 'vmware_desktop';
                         try {
-                            ({ launchDir } = JSON.parse(body));
+                            ({ launchDir, provider = 'vmware_desktop' } = JSON.parse(body));
                         } catch {
                             res.writeHead(400);
                             res.end('Invalid JSON');
                             return;
                         }
+
+                        // Whitelist providers to prevent injection
+                        const safeProvider = provider === 'virtualbox' ? 'virtualbox' : 'vmware_desktop';
 
                         const key = jobKey(launchDir);
                         const cwd = launchDir === '.' ? LAB_DIR : path.join(LAB_DIR, launchDir);
@@ -61,12 +65,20 @@ function labApiPlugin() {
                             'X-Content-Type-Options': 'nosniff',
                         });
 
+                        // Subscribe the originating response so it receives streamed output directly
+                        job.subscribers.add(res);
+                        req.on('close', () => job.subscribers.delete(res));
+
                         const broadcast = (text: string) => {
                             job.buf.push(text);
                             job.subscribers.forEach((s: any) => { try { s.write(text); } catch {} });
                         };
 
-                        const proc = spawn('vagrant', args, { cwd, shell: true });
+                        const proc = spawn('vagrant', args, {
+                            cwd,
+                            shell: true,
+                            env: { ...process.env, VAGRANT_DEFAULT_PROVIDER: safeProvider },
+                        });
                         proc.stdout.on('data', (d: any) => broadcast(d.toString()));
                         proc.stderr.on('data', (d: any) => broadcast(d.toString()));
                         proc.on('close', (code: any) => {
@@ -76,7 +88,6 @@ function labApiPlugin() {
                             job.code = code ?? -1;
                             job.subscribers.forEach((s: any) => { try { s.end(); } catch {} });
                             job.subscribers.clear();
-                            res.end();
                         });
                         proc.on('error', (err: any) => {
                             const msg = `\n[Error] ${err.message}\n`;
@@ -84,7 +95,6 @@ function labApiPlugin() {
                             job.done = true;
                             job.subscribers.forEach((s: any) => { try { s.end(); } catch {} });
                             job.subscribers.clear();
-                            res.end();
                         });
                     });
                     return;
@@ -161,15 +171,82 @@ function labApiPlugin() {
     };
 }
 
-export default defineConfig({
-    plugins: [react(), labApiPlugin()],
-    resolve: {
-        alias: {
-            '@': path.resolve(__dirname, './src'),
+// ── Brave Web Search proxy ────────────────────────────────────────────────────
+// The API key is read from .env.local (BRAVE_API_KEY) and never sent to the
+// browser. The client only calls /api/search?q=... on localhost.
+function braveSearchPlugin(apiKey: string) {
+    return {
+        name: 'brave-search-api',
+        configureServer(server: any) {
+            server.middlewares.use('/api/search', async (req: any, res: any, next: () => void) => {
+                if (req.method !== 'GET') { next(); return; }
+
+                const urlStr: string = req.url ?? '';
+                const params = new URLSearchParams(urlStr.includes('?') ? urlStr.split('?')[1] : '');
+                const q = params.get('q')?.trim();
+
+                if (!q) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Missing query parameter q' }));
+                    return;
+                }
+
+                if (!apiKey) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'BRAVE_API_KEY not set in .env.local' }));
+                    return;
+                }
+
+                try {
+                    // URL is hardcoded — q is only used as a search term, not as a URL
+                    const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(q)}&count=5&text_decorations=false&search_lang=en`;
+                    const response = await fetch(searchUrl, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'Accept-Encoding': 'gzip',
+                            'X-Subscription-Token': apiKey,
+                        },
+                    });
+
+                    if (!response.ok) {
+                        res.writeHead(response.status, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: `Brave API returned ${response.status}` }));
+                        return;
+                    }
+
+                    const data = await response.json();
+                    const results = (data.web?.results ?? []).slice(0, 5).map((r: any) => ({
+                        title:       r.title       ?? '',
+                        url:         r.url         ?? '',
+                        description: r.description ?? '',
+                    }));
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ results }));
+                } catch (err: any) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: err.message }));
+                }
+            });
         },
-    },
-    server: {
-        port: 5173,
-        host: true,
-    },
+    };
+}
+
+export default defineConfig(({ mode }) => {
+    // Load all env vars (including non-VITE_ prefixed) — used server-side only
+    const env = loadEnv(mode, process.cwd(), '');
+    const braveKey = env.BRAVE_API_KEY ?? '';
+
+    return {
+        plugins: [react(), labApiPlugin(), braveSearchPlugin(braveKey)],
+        resolve: {
+            alias: {
+                '@': path.resolve(__dirname, './src'),
+            },
+        },
+        server: {
+            port: 5173,
+            host: true,
+        },
+    };
 });

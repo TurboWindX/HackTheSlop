@@ -1,14 +1,14 @@
-# =============================================================================
-# ADCS Extra Templates — ESC2, ESC3, ESC7
+﻿# =============================================================================
+# ADCS Extra Templates  -  ESC2, ESC3, ESC7
 #
 # Runs AFTER provision-dc01-step2.ps1 (ADCS must already be installed).
 # Used by the adcs-deep-dive scenario to add deeper ADCS coverage beyond
 # the ESC1/ESC4/ESC6 already created in step2.
 #
 # Templates added:
-#   ESC2 — AnyPurposeTemplate:     No EKU restriction, Domain Users enroll
-#   ESC3 — EnrollmentAgentTemplate: Certificate Request Agent EKU, Domain Users enroll
-#   ESC7 — carol.white gets Manage CA + Manage Certificates on the CA object
+#   ESC2  -  AnyPurposeTemplate:     No EKU restriction, Domain Users enroll
+#   ESC3  -  EnrollmentAgentTemplate: Certificate Request Agent EKU, Domain Users enroll
+#   ESC7  -  carol.white gets Manage CA + Manage Certificates on the CA object
 #
 # TURBO USE ONLY
 # =============================================================================
@@ -19,7 +19,7 @@ $ErrorActionPreference = "Continue"
 
 $domain      = $env:DOMAIN       # turbo.lab
 $domainShort = $env:DOMAIN_SHORT  # TURBO
-$adminPass   = $env:ADMIN_PASS    # Vagrant123!
+$adminPass   = $env:ADMIN_PASS    # vagrant
 
 Import-Module ActiveDirectory
 
@@ -87,7 +87,7 @@ if (-not ([adsi]::Exists("LDAP://$esc2DN"))) {
 
         $newEntry.Put("displayName", $esc2Name)
         $newEntry.Put("cn",          $esc2Name)
-        # No EKU restriction — the template has "Any Purpose" or empty EKU
+        # No EKU restriction  -  the template has "Any Purpose" or empty EKU
         $newEntry.Put("pKIExtendedKeyUsage", @())           # empty = unrestricted
         $newEntry.Put("msPKI-Certificate-Name-Flag",  0)    # no ENROLLEE_SUPPLIES_SUBJECT
         $newEntry.Put("msPKI-Certificate-Application-Policy", @())
@@ -98,23 +98,23 @@ if (-not ([adsi]::Exists("LDAP://$esc2DN"))) {
         Grant-DomainUsersEnroll $newEntry
         Publish-Template $esc2Name
         Write-Host "  [VULN] ESC2 template created: $esc2Name"
-        Write-Host "         No EKU restriction — can be used for ANY purpose including PKINIT auth"
+        Write-Host "         No EKU restriction  -  can be used for ANY purpose including PKINIT auth"
     } catch {
         Write-Host "  [!] ESC2 template creation failed: $_"
     }
 } else {
-    Write-Host "  [*] $esc2Name already exists — skipping."
+    Write-Host "  [*] $esc2Name already exists  -  skipping."
 }
 
 # ── ESC3: Enrollment Agent template ──────────────────────────────────────────
 # [VULN] Template grants Certificate Request Agent EKU.
 # An enrollment agent can request certificates ON BEHALF OF any principal.
 # Two-step attack:
-#   Step 1: Enroll in EnrollmentAgentTemplate → get enrollment agent cert
+#   Step 1: Enroll in EnrollmentAgentTemplate -> get enrollment agent cert
 #   Step 2: Use that cert to request a SmartCard Logon cert for Administrator
 #           certipy req -ca LAB-CA -template User -on-behalf-of 'lab\administrator'
 #                       -pfx agent.pfx
-#   Step 3: certipy auth -pfx administrator.pfx → get Admin TGT
+#   Step 3: certipy auth -pfx administrator.pfx -> get Admin TGT
 Write-Host "[*] Creating ESC3 template (EnrollmentAgentTemplate)..."
 $esc3Name = "EnrollmentAgentTemplate"
 $esc3DN   = "CN=$esc3Name,$templatesDN"
@@ -128,7 +128,7 @@ if (-not ([adsi]::Exists("LDAP://$esc3DN"))) {
 
         $newEntry.Put("displayName", $esc3Name)
         $newEntry.Put("cn",          $esc3Name)
-        # Certificate Request Agent EKU — 1.3.6.1.4.1.311.20.2.1
+        # Certificate Request Agent EKU  -  1.3.6.1.4.1.311.20.2.1
         $newEntry.Put("pKIExtendedKeyUsage", @("1.3.6.1.4.1.311.20.2.1"))
         $newEntry.Put("msPKI-Certificate-Application-Policy", @("1.3.6.1.4.1.311.20.2.1"))
         $newEntry.Put("msPKI-Certificate-Name-Flag", 0)
@@ -140,19 +140,19 @@ if (-not ([adsi]::Exists("LDAP://$esc3DN"))) {
         Grant-DomainUsersEnroll $newEntry
         Publish-Template $esc3Name
         Write-Host "  [VULN] ESC3 template created: $esc3Name"
-        Write-Host "         Enrollment Agent EKU — enroll to get on-behalf-of signing cert"
+        Write-Host "         Enrollment Agent EKU  -  enroll to get on-behalf-of signing cert"
     } catch {
         Write-Host "  [!] ESC3 template creation failed: $_"
     }
 } else {
-    Write-Host "  [*] $esc3Name already exists — skipping."
+    Write-Host "  [*] $esc3Name already exists  -  skipping."
 }
 
 # ── ESC7: Manage CA / Manage Certificates granted to carol.white ─────────────
 # [VULN] carol.white (IT Admins group) gets "Manage CA" and "Manage Certificates"
 # on the CA object in DCOM/RPC.
-# With Manage CA: can enable EDITF_ATTRIBUTESUBJECTALTNAME2 flag → instant ESC6
-# With Manage Certificates: can approve pending certificate requests → bypass manager approval
+# With Manage CA: can enable EDITF_ATTRIBUTESUBJECTALTNAME2 flag -> instant ESC6
+# With Manage Certificates: can approve pending certificate requests -> bypass manager approval
 # Attack:  certipy ca -ca LAB-CA -add-officer carol.white    (if only ManageCert)
 #          certipy ca -ca LAB-CA -enable-template User       (if ManageCA)
 #          certutil -config DC01.turbo.lab\LAB-CA -setreg CA\EditFlags +EDITF_ATTRIBUTESUBJECTALTNAME2
@@ -187,8 +187,8 @@ Write-Host ""
 Write-Host "================================================================"
 Write-Host "  ADCS Extra Templates Provisioned"
 Write-Host "================================================================"
-Write-Host "  ESC2: AnyPurposeTemplate   — no EKU restriction"
-Write-Host "  ESC3: EnrollmentAgentTemplate — on-behalf-of signing"
+Write-Host "  ESC2: AnyPurposeTemplate    -  no EKU restriction"
+Write-Host "  ESC3: EnrollmentAgentTemplate  -  on-behalf-of signing"
 Write-Host "  ESC7: carol.white Manage CA + Manage Certificates"
 Write-Host ""
 Write-Host "  Combined with step2: ESC1,ESC2,ESC3,ESC4,ESC6,ESC7,ESC8 all present"

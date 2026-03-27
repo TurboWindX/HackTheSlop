@@ -1,5 +1,5 @@
-# =============================================================================
-# SRV02 — Child Domain Member Server
+﻿# =============================================================================
+# SRV02  -  Child Domain Member Server
 #
 # - Joins child.turbo.lab domain
 # - Installs IIS with Windows Authentication (NTLM relay target)
@@ -18,10 +18,16 @@ $ErrorActionPreference = "Continue"
 
 $childDomain = $env:CHILD_DOMAIN   # child.turbo.lab
 $childShort  = $env:CHILD_SHORT    # CHILD
-$adminPass   = $env:ADMIN_PASS     # Vagrant123!
+$adminPass   = $env:ADMIN_PASS     # vagrant
 $dc02Ip      = $env:DC02_IP        # 192.168.56.11
 $srv01Ip     = $env:SRV01_IP       # 192.168.56.20
 $srv02Ip     = $env:SRV02_IP       # 192.168.56.21
+
+# ── Rename computer (takes effect at the Restart-Computer at end of this script) ──
+if ($env:COMPUTERNAME -ne "SRV02") {
+    Write-Host "[*] Renaming computer to SRV02..."
+    Rename-Computer -NewName "SRV02" -Force -ErrorAction SilentlyContinue
+}
 
 # ── Configure lab network adapter ─────────────────────────────────────────────
 # Sort by ifIndex: lowest = Vagrant NAT adapter (leave it alone)
@@ -57,7 +63,7 @@ while ((Get-Date) -lt $deadline) {
     if (Test-Connection -ComputerName $dc02Ip -Count 1 -Quiet) {
         try {
             Resolve-DnsName $childDomain -Server $dc02Ip -ErrorAction Stop | Out-Null
-            Write-Host "[+] DC02 reachable — $childDomain resolves."
+            Write-Host "[+] DC02 reachable  -  $childDomain resolves."
             break
         } catch {
             Write-Host "  [*] DNS not ready on DC02 yet, retrying in 15s..."
@@ -83,7 +89,7 @@ try {
 
 # ── Install IIS with Windows Authentication (NTLM relay target) ───────────────
 # [VULN] Portal requiring Windows Auth = valid NTLM relay target
-# Attack: Responder coerce → relay to LDAP/SMB/ADCS (ntlmrelayx)
+# Attack: Responder coerce -> relay to LDAP/SMB/ADCS (ntlmrelayx)
 Write-Host "[*] Installing IIS with Windows Authentication..."
 Install-WindowsFeature -Name `
     Web-Server, Web-WebServer, Web-Common-Http, Web-Default-Doc, Web-Http-Errors, `
@@ -96,7 +102,7 @@ New-Item -ItemType Directory -Path $sitePath -Force | Out-Null
 @"
 <!DOCTYPE html>
 <html><body>
-<h1>CHILD Domain Intranet — SRV02</h1>
+<h1>CHILD Domain Intranet  -  SRV02</h1>
 <p>Internal portal. Windows Authentication required.</p>
 <p>Server: SRV02.$childDomain | IP: $srv02Ip</p>
 </body></html>
@@ -117,12 +123,12 @@ try {
 }
 
 # ── [VULN] Enable Print Spooler (PrinterBug) ──────────────────────────────────
-# SpoolSample / PetitPotam → force SRV02 to authenticate to attacker
+# SpoolSample / PetitPotam -> force SRV02 to authenticate to attacker
 # Combined with unconstrained delegation: excellent coercion target
 Write-Host "[*] Enabling Print Spooler (PrinterBug target)..."
 Set-Service  -Name Spooler -StartupType Automatic -ErrorAction SilentlyContinue
 Start-Service -Name Spooler -ErrorAction SilentlyContinue
-Write-Host "  [VULN] Print Spooler running — SpoolSample / MS-RPRN coercion target"
+Write-Host "  [VULN] Print Spooler running  -  SpoolSample / MS-RPRN coercion target"
 
 # ── [VULN] Disable SMB signing ─────────────────────────────────────────────────
 Write-Host "[*] Disabling SMB signing..."
@@ -137,10 +143,10 @@ Enable-PSRemoting -Force -SkipNetworkProfileCheck -ErrorAction SilentlyContinue
 Set-Item WSMan:\localhost\Client\TrustedHosts -Value "*" -Force -ErrorAction SilentlyContinue
 Set-Service WinRM -StartupType Automatic
 netsh advfirewall firewall add rule name="WinRM HTTP" protocol=TCP dir=in localport=5985 action=allow | Out-Null
-Write-Host "  [VULN] WinRM enabled on 5985 — Evil-WinRM target"
+Write-Host "  [VULN] WinRM enabled on 5985  -  Evil-WinRM target"
 
 # ── [VULN] Store cross-domain credentials in DPAPI vault ──────────────────────
-# Parent domain (LAB) creds cached here — extractable via Mimikatz dpapi::cred
+# Parent domain (LAB) creds cached here  -  extractable via Mimikatz dpapi::cred
 Write-Host "[*] Storing cross-domain credentials in Credential Manager..."
 cmdkey /add:"TERMSRV/SRV01.turbo.lab"  /user:"LAB\svc_backup"    /pass:"Backup123!"  | Out-Null
 cmdkey /add:"TERMSRV/DC01.turbo.lab"   /user:"LAB\Administrator"  /pass:"Vagrant123!" | Out-Null
@@ -164,5 +170,6 @@ frank.admin password hint:       Admin123!
 New-SmbShare -Name "IT-Child" -Path $sharePath -FullAccess "Everyone" -ErrorAction SilentlyContinue
 Write-Host "  [VULN] Share \\SRV02\IT-Child created (DSRM + krbtgt notes exposed)"
 
-Write-Host "[+] SRV02 provisioning complete. Rebooting to finalize domain join..."
-Restart-Computer -Force
+Write-Host "[+] SRV02 provisioning complete. Rebooting in 5s to finalize domain join..."
+& "$env:SystemRoot\System32\shutdown.exe" /r /t 5
+exit 0

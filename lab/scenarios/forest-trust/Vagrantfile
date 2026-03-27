@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Scenario: Forest / Domain Trust Attacks
 # VMs: DC01 + DC02 + WS01   |  RAM: ~9 GB   |  Provision time: ~50 min
 #
@@ -6,18 +6,18 @@
 # Trust type: Parent-child, bidirectional, transitive (auto-created on DC02 promotion)
 #
 # Attack techniques covered:
-#   Cross-domain enumeration — BloodHound / SharpHound across trust
-#   ExtraSids attack         — Forge inter-realm TGT with Enterprise Admin SID (S-1-5-21-...-519)
+#   Cross-domain enumeration â€” BloodHound / SharpHound across trust
+#   ExtraSids attack         â€” Forge inter-realm TGT with Enterprise Admin SID (S-1-5-21-...-519)
 #                              Impacket: ticketer.py + secretsdump.py
-#   Trust ticket forging     — Get child krbtgt NTLM → craft inter-realm TGT
-#   SID history abuse        — Add parent domain SID to forged ticket SID history
+#   Trust ticket forging     â€” Get child krbtgt NTLM â†’ craft inter-realm TGT
+#   SID history abuse        â€” Add parent domain SID to forged ticket SID history
 #   Unconstrained + PrinterBug (cross-domain)
-#                            — svc_child_web has unconstrained deleg on DC02
-#                              SpoolSample DC01 → DC01 TGT coerced to child domain host
-#   Cross-domain PTT         — Use golden/trust ticket across domain boundary
-#   Child→Parent escalation path:
+#                            â€” svc_child_web has unconstrained deleg on DC02
+#                              SpoolSample DC01 â†’ DC01 TGT coerced to child domain host
+#   Cross-domain PTT         â€” Use golden/trust ticket across domain boundary
+#   Childâ†’Parent escalation path:
 #     1. Compromise frank.admin (Child DA)
-#     2. DCSync child domain → get krbtgt hash
+#     2. DCSync child domain â†’ get krbtgt hash
 #     3. Forge inter-realm golden ticket with -extra-sid (Enterprise Admin)
 #     4. Access any resource in turbo.lab as Enterprise Admin
 #
@@ -38,7 +38,7 @@ DOMAIN        = "turbo.lab"
 DOMAIN_SHORT  = "TURBOLAB"
 CHILD_DOMAIN  = "child.turbo.lab"
 CHILD_SHORT   = "CHILDLAB"
-DOMAIN_PASS   = "Vagrant123!"
+DOMAIN_PASS   = "vagrant"
 DC_IP         = "192.168.56.10"
 DC02_IP       = "192.168.56.11"
 WS1_IP        = "192.168.56.30"
@@ -47,12 +47,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box_check_update   = false
   config.winrm.transport       = :negotiate
   config.winrm.basic_auth_only = false
+  config.vm.boot_timeout        = 1200
+  config.winrm.timeout          = 7200
+  config.winrm.retry_limit      = 60
+  config.winrm.retry_delay      = 10
 
-  # ── DC01: Parent domain controller (turbo.lab) ───────────────────────────────
+  # â”€â”€ DC01: Parent domain controller (turbo.lab) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "dc01", primary: true do |dc|
     dc.vm.box      = "StefanScherer/windows_2019"
-    dc.vm.hostname = "DC01"
     dc.vm.network  "private_network", ip: DC_IP
+    dc.vm.synced_folder ".", "/vagrant", disabled: true
 
     dc.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "TRUST-DC01"
@@ -67,37 +71,25 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
     end
 
-    dc.vm.provision "shell",
-      path:   "../../scripts/provision-dc01-step0.ps1",
-      reboot: true,
-      env: {
-        "DC_IP" => DC_IP,
-      }
+    dc.vm.provision "file",
+      source:      "../../scripts/provision-dc01-step2.ps1",
+      destination: "C:/Windows/Temp/provision-dc01-step2.ps1"
 
     dc.vm.provision "shell",
-      path:   "../../scripts/provision-dc01-step1.ps1",
-      reboot: true,
+      path:   "../../scripts/provision-dc01-bootstrap.ps1",
       env: {
         "DOMAIN"       => DOMAIN,
         "DOMAIN_SHORT" => DOMAIN_SHORT,
         "ADMIN_PASS"   => DOMAIN_PASS,
         "DC_IP"        => DC_IP,
       }
-
-    dc.vm.provision "shell",
-      path: "../../scripts/provision-dc01-step2.ps1",
-      env: {
-        "DOMAIN"       => DOMAIN,
-        "DOMAIN_SHORT" => DOMAIN_SHORT,
-        "ADMIN_PASS"   => DOMAIN_PASS,
-      }
   end
 
-  # ── DC02: Child domain controller (child.turbo.lab) ──────────────────────────
+  # â”€â”€ DC02: Child domain controller (child.turbo.lab) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "dc02" do |dc2|
     dc2.vm.box      = "StefanScherer/windows_2019"
-    dc2.vm.hostname = "DC02"
     dc2.vm.network  "private_network", ip: DC02_IP
+    dc2.vm.synced_folder ".", "/vagrant", disabled: true
 
     dc2.vm.provider "vmware_desktop" do |v|
       v.vmx["displayName"] = "TRUST-DC02"
@@ -114,7 +106,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
     dc2.vm.provision "shell",
       path:   "../../scripts/provision-dc02-step1.ps1",
-      reboot: true,
       env: {
         "PARENT_DOMAIN" => DOMAIN,
         "CHILD_DOMAIN"  => CHILD_DOMAIN,
@@ -136,10 +127,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       }
   end
 
-  # ── WS01: Domain workstation (joined to turbo.lab, foothold) ─────────────────
+  # â”€â”€ WS01: Domain workstation (joined to turbo.lab, foothold) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   config.vm.define "ws01" do |ws|
     ws.vm.box      = "StefanScherer/windows_10"
-    ws.vm.hostname = "WS01"
     ws.vm.network  "private_network", ip: WS1_IP
 
     ws.vm.provider "vmware_desktop" do |v|
