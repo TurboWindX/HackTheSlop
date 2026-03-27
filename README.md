@@ -28,7 +28,7 @@
 ![Sherpa](https://github.com/user-attachments/assets/f2b6a1bf-b2ea-4287-8ff7-d2a027352aac)
 
 **🩸 BloodHound**
-![BloodHound](https://github.com/user-attachments/assets/b382eb6d-d7a0-402c-b56b-c743e9172c8d)
+![BloodHound](https://github.com/user-attachments/assets/5d55a58a-ddb9-4bf6-8276-379483dc08f7)
 
 **⚡ Commands**
 ![Commands](https://github.com/user-attachments/assets/99e5e78d-4812-4d16-b642-8903565d674d)
