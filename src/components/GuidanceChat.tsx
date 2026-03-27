@@ -75,8 +75,8 @@ interface GuidanceChatProps {
     bloodhoundJson?: string;
 }
 
-const CHAT_STORAGE_KEY = 'turbohax_chat_history';
-const PHASE_STORAGE_KEY = 'turbohax_chat_phase';
+const CHAT_STORAGE_KEY = 'hacktheslop_chat_history';
+const PHASE_STORAGE_KEY = 'hacktheslop_chat_phase';
 
 const GuidanceChat: React.FC<GuidanceChatProps> = ({ engagement, bloodhoundJson }) => {
     const [messages, setMessages] = useState<AIMessage[]>(() => {

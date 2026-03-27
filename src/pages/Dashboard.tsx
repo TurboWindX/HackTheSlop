@@ -126,7 +126,7 @@ const Dashboard: React.FC = () => {
     return (
         <div className="dashboard">
             <header className="dashboard-header">
-                <h1>TurboHax</h1>
+                <h1>HackTheSlop</h1>
                 {engagement && (
                     <div className="engagement-badge">
                         <span className="badge-label">Loot:</span>
