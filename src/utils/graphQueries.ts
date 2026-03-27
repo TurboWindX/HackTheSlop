@@ -1,6 +1,6 @@
-﻿import { BHGraph, BHGraphNode, BHGraphEdge, DANGEROUS_EDGES } from '../services/bloodhoundParser';
+import { BHGraph, BHGraphNode, BHGraphEdge, DANGEROUS_EDGES } from '../services/bloodhoundParser';
 
-// â”€â”€ Public types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Public types ──────────────────────────────────────────────────────────────
 
 export type QueryCategory = 'paths' | 'kerberos' | 'acl' | 'delegation' | 'highvalue' | 'adcs';
 
@@ -20,7 +20,7 @@ export interface QueryDef {
     run: (graph: BHGraph, owned: Set<string>) => QueryResult;
 }
 
-// â”€â”€ Node classifiers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Node classifiers ──────────────────────────────────────────────────────────
 
 const DA_PATTERNS  = ['DOMAIN ADMINS', 'ENTERPRISE ADMINS', 'SCHEMA ADMINS'];
 const HV_PATTERNS  = [
@@ -44,9 +44,9 @@ function isDomainAdminNode(node: BHGraphNode): boolean {
     return DA_PATTERNS.some(p => up.startsWith(p + '@') || up === p) || node.type === 'Domain';
 }
 
-// â”€â”€ BFS: all shortest paths from source-set to target-set â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── BFS: all shortest paths from source-set to target-set ─────────────────────
 //
-//  Traverses edges in their natural direction (source â†’ target).
+//  Traverses edges in their natural direction (source → target).
 //  Returns a subgraph containing every node/edge that lies on ANY shortest path.
 
 export function bfsShortestPaths(
@@ -118,7 +118,7 @@ export function bfsShortestPaths(
         if (dist.has(t) && dist.get(t)! <= targetDist) backtrack(t);
     }
 
-    const nodeMap = new Map(graph.nodes.map(n => [n.id, n]));
+    const nodeMap = getNodeMap(graph);
     const nodes   = Array.from(pathNodeIds)
         .map(id => nodeMap.get(id))
         .filter(Boolean) as BHGraphNode[];
@@ -126,7 +126,7 @@ export function bfsShortestPaths(
     return { nodes, edges: pathEdges };
 }
 
-// â”€â”€ Subgraph helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Subgraph helpers ──────────────────────────────────────────────────────────
 
 /** Build a subgraph from a node list, optionally including their mutual edges. */
 function nodeSubgraph(nodes: BHGraphNode[], graph: BHGraph, includeEdges = true): BHGraph {
@@ -141,30 +141,41 @@ function nodeSubgraph(nodes: BHGraphNode[], graph: BHGraph, includeEdges = true)
 function edgeSubgraph(edges: BHGraphEdge[], graph: BHGraph): BHGraph {
     const ids = new Set<string>();
     edges.forEach(e => { ids.add(e.source); ids.add(e.target); });
-    const nodeMap = new Map(graph.nodes.map(n => [n.id, n]));
+    const nm = getNodeMap(graph);
     const nodes = Array.from(ids).map(id => (
-        nodeMap.get(id) ?? { id, name: id.slice(-14), type: 'Unknown' }
+        nm.get(id) ?? { id, name: id.slice(-14), type: 'Unknown' }
     )) as BHGraphNode[];
     return { nodes, edges };
 }
 
-function nameOf(graph: BHGraph, id: string): string {
-    return graph.nodes.find(n => n.id === id)?.name ?? id.slice(-14);
+// WeakMap-cached O(1) node lookup � rebuilt only when the graph reference changes.
+const _nodeMapCache = new WeakMap<BHGraph, Map<string, BHGraphNode>>();
+function getNodeMap(graph: BHGraph): Map<string, BHGraphNode> {
+    let m = _nodeMapCache.get(graph);
+    if (!m) {
+        m = new Map(graph.nodes.map(n => [n.id, n]));
+        _nodeMapCache.set(graph, m);
+    }
+    return m;
 }
 
-// â”€â”€ Query catalogue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function nameOf(graph: BHGraph, id: string): string {
+    return getNodeMap(graph).get(id)?.name ?? id.slice(-14);
+}
+
+// ── Query catalogue ───────────────────────────────────────────────────────────
 
 export const QUERIES: QueryDef[] = [
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• ATTACK PATHS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════ ATTACK PATHS ══════════════════
 
     {
         id: 'path-owned-to-da',
-        name: 'Shortest Path: Owned â†’ DA',
+        name: 'Shortest Path: Owned → DA',
         description: 'All shortest attack paths from marked owned objects to Domain Admins / Enterprise Admins.',
         category: 'paths',
         requiresOwned: true,
-        icon: 'ðŸŽ¯',
+        icon: '🎯',
         run(graph, owned) {
             const targets  = new Set(graph.nodes.filter(isDomainAdminNode).map(n => n.id));
             const subgraph = bfsShortestPaths(graph, owned, targets);
@@ -183,7 +194,7 @@ export const QUERIES: QueryDef[] = [
                 : 0;
             const findings = subgraph.nodes.length > 0
                 ? [
-                    `Found attack path(s) â€” ${subgraph.edges.length} edges / ${subgraph.nodes.length} nodes.`,
+                    `Found attack path(s) — ${subgraph.edges.length} edges / ${subgraph.nodes.length} nodes.`,
                     depth > 0 ? `Estimated depth: ${depth} hop(s).` : '',
                 ].filter(Boolean)
                 : ['No path from owned objects to Domain Admins found.'];
@@ -193,16 +204,16 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'path-owned-to-hvt',
-        name: 'Shortest Path: Owned â†’ HVT',
+        name: 'Shortest Path: Owned → HVT',
         description: 'Shortest paths from owned objects to ALL High Value Targets (DAs, Admins, DCs, Domains).',
         category: 'paths',
         requiresOwned: true,
-        icon: 'ðŸ’€',
+        icon: '💀',
         run(graph, owned) {
             const targets  = new Set(graph.nodes.filter(isHighValue).map(n => n.id));
             const subgraph = bfsShortestPaths(graph, owned, targets);
             const findings = subgraph.nodes.length > 0
-                ? [`Found paths from ${owned.size} owned object(s) to ${targets.size} high value target(s) â€” ${subgraph.edges.length} edges.`]
+                ? [`Found paths from ${owned.size} owned object(s) to ${targets.size} high value target(s) — ${subgraph.edges.length} edges.`]
                 : ['No path from owned objects to any High Value Target.'];
             return { subgraph, findings, count: subgraph.nodes.length };
         },
@@ -214,7 +225,7 @@ export const QUERIES: QueryDef[] = [
         description: 'All AdminTo, CanRDP, CanPSRemote, and ExecuteDCOM edges from owned objects.',
         category: 'paths',
         requiresOwned: true,
-        icon: 'ðŸ–¥ï¸',
+        icon: '🖥️',
         run(graph, owned) {
             const LATERAL = new Set(['AdminTo', 'CanRDP', 'CanPSRemote', 'ExecuteDCOM']);
             const edges   = graph.edges.filter(e => owned.has(e.source) && LATERAL.has(e.label));
@@ -223,8 +234,8 @@ export const QUERIES: QueryDef[] = [
             const findings = edges.length > 0
                 ? [
                     `${owned.size} owned object(s) have lateral movement rights on ${comps.length} computer(s).`,
-                    ...edges.slice(0, 8).map(e => `  â€¢ ${nameOf(graph, e.source)} â†’[${e.label}]â†’ ${nameOf(graph, e.target)}`),
-                    edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                    ...edges.slice(0, 8).map(e => `  • ${nameOf(graph, e.source)} →[${e.label}]→ ${nameOf(graph, e.target)}`),
+                    edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
                 ].filter(Boolean)
                 : ['No direct lateral movement edges from owned objects.'];
             return { subgraph: sub, findings, count: comps.length };
@@ -234,40 +245,38 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'path-sessions',
         name: 'Sessions on Owned Computers',
-        description: 'Privileged users with active sessions on computers you own â€” credential theft targets.',
+        description: 'Privileged users with active sessions on computers you own — credential theft targets.',
         category: 'paths',
         requiresOwned: true,
-        icon: 'ðŸ‘¤',
+        icon: '👤',
         run(graph, owned) {
-            // Sessions: user â†’ HasSession â†’ computer
+            // Sessions: user → HasSession → computer
             // We want sessions ON owned computers (owned = computer target)
             const edges = graph.edges.filter(e => e.label === 'HasSession' && owned.has(e.target));
             const sub   = edgeSubgraph(edges, graph);
             const users = [...new Set(edges.map(e => e.source))];
-            const hvUsers = users.filter(uid => {
-                const n = graph.nodes.find(x => x.id === uid);
-                return !!(n?.properties?.admincount);
-            });
+            const nm    = getNodeMap(graph);
+            const hvUsers = users.filter(uid => !!(nm.get(uid)?.properties?.admincount));
             const findings = edges.length > 0
                 ? [
                     `${users.length} user session(s) found on ${owned.size} owned computer(s).`,
-                    hvUsers.length > 0 ? `âš ï¸ ${hvUsers.length} have adminCount=1!` : '',
-                    ...edges.slice(0, 8).map(e => `  â€¢ ${nameOf(graph, e.source)} â†’ ${nameOf(graph, e.target)}`),
+                    hvUsers.length > 0 ? `⚠️ ${hvUsers.length} have adminCount=1!` : '',
+                    ...edges.slice(0, 8).map(e => `  • ${nameOf(graph, e.source)} → ${nameOf(graph, e.target)}`),
                 ].filter(Boolean)
                 : ['No sessions found on owned computers.'];
             return { subgraph: sub, findings, count: users.length };
         },
     },
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• KERBEROS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════ KERBEROS ══════════════════
 
     {
         id: 'kerb-kerberoastable',
         name: 'Kerberoastable Users',
-        description: 'Enabled users with an SPN â€” request a TGS then crack offline.',
+        description: 'Enabled users with an SPN — request a TGS then crack offline.',
         category: 'kerberos',
         requiresOwned: false,
-        icon: 'ðŸ”‘',
+        icon: '🔑',
         run(graph) {
             const nodes = graph.nodes.filter(n =>
                 n.type === 'User' &&
@@ -278,9 +287,9 @@ export const QUERIES: QueryDef[] = [
             const adminHits = nodes.filter(n => n.properties?.admincount).length;
             const findings = [
                 `${nodes.length} kerberoastable user(s).`,
-                adminHits > 0 ? `âš ï¸ ${adminHits} have adminCount=1 â€” high priority!` : '',
-                ...nodes.slice(0, 8).map(n => `  â€¢ ${n.name}`),
-                nodes.length > 8 ? `  â€¦ and ${nodes.length - 8} more` : '',
+                adminHits > 0 ? `⚠️ ${adminHits} have adminCount=1 — high priority!` : '',
+                ...nodes.slice(0, 8).map(n => `  • ${n.name}`),
+                nodes.length > 8 ? `  … and ${nodes.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: nodes.length };
         },
@@ -289,10 +298,10 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'kerb-asrep',
         name: 'AS-REP Roastable Users',
-        description: 'Users with pre-auth disabled â€” capture hash with no credentials.',
+        description: 'Users with pre-auth disabled — capture hash with no credentials.',
         category: 'kerberos',
         requiresOwned: false,
-        icon: 'ðŸž',
+        icon: '🍞',
         run(graph) {
             const nodes = graph.nodes.filter(n =>
                 n.type === 'User' &&
@@ -301,8 +310,8 @@ export const QUERIES: QueryDef[] = [
             const sub = nodeSubgraph(nodes, graph);
             const findings = [
                 `${nodes.length} AS-REP roastable user(s).`,
-                ...nodes.slice(0, 10).map(n => `  â€¢ ${n.name}`),
-                nodes.length > 10 ? `  â€¦ and ${nodes.length - 10} more` : '',
+                ...nodes.slice(0, 10).map(n => `  • ${n.name}`),
+                nodes.length > 10 ? `  … and ${nodes.length - 10} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: nodes.length };
         },
@@ -310,11 +319,11 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'kerb-kerberoastable-to-da',
-        name: 'Kerberoastable â†’ DA',
+        name: 'Kerberoastable → DA',
         description: 'Shortest paths from kerberoastable service accounts to Domain Admins.',
         category: 'kerberos',
         requiresOwned: false,
-        icon: 'ðŸ”‘â†’ðŸŽ¯',
+        icon: '🔑→🎯',
         run(graph) {
             const sources = new Set(
                 graph.nodes
@@ -324,7 +333,7 @@ export const QUERIES: QueryDef[] = [
             const targets  = new Set(graph.nodes.filter(isDomainAdminNode).map(n => n.id));
             const subgraph = bfsShortestPaths(graph, sources, targets);
             const findings = subgraph.nodes.length > 0
-                ? [`Found path(s) from ${sources.size} kerberoastable user(s) toward Domain Admins â€” ${subgraph.edges.length} edges.`]
+                ? [`Found path(s) from ${sources.size} kerberoastable user(s) toward Domain Admins — ${subgraph.edges.length} edges.`]
                 : ['No path from kerberoastable users to Domain Admins.'];
             return { subgraph, findings, count: subgraph.nodes.length };
         },
@@ -332,11 +341,11 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'kerb-asrep-to-da',
-        name: 'AS-REP â†’ DA',
+        name: 'AS-REP → DA',
         description: 'Shortest paths from AS-REP roastable accounts to Domain Admins.',
         category: 'kerberos',
         requiresOwned: false,
-        icon: 'ðŸžâ†’ðŸŽ¯',
+        icon: '🍞→🎯',
         run(graph) {
             const sources  = new Set(
                 graph.nodes
@@ -355,10 +364,10 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'kerb-unconstrained',
         name: 'Unconstrained Delegation (non-DC)',
-        description: 'Computers with unconstrained delegation â€” any authenticating user\'s TGT is cached here.',
+        description: 'Computers with unconstrained delegation — any authenticating user\'s TGT is cached here.',
         category: 'kerberos',
         requiresOwned: false,
-        icon: 'ðŸª£',
+        icon: '🪣',
         run(graph) {
             const dcGroupIds = new Set(
                 graph.nodes
@@ -378,8 +387,8 @@ export const QUERIES: QueryDef[] = [
             const sub = nodeSubgraph(nodes, graph, false);
             const findings = [
                 `${nodes.length} non-DC computer(s) with unconstrained delegation.`,
-                ...nodes.slice(0, 8).map(n => `  â€¢ ${n.name}`),
-                nodes.length > 8 ? `  â€¦ and ${nodes.length - 8} more` : '',
+                ...nodes.slice(0, 8).map(n => `  • ${n.name}`),
+                nodes.length > 8 ? `  … and ${nodes.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: nodes.length };
         },
@@ -388,32 +397,32 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'kerb-constrained',
         name: 'Constrained Delegation',
-        description: 'Principals with AllowedToDelegate â€” can impersonate users to specific services.',
+        description: 'Principals with AllowedToDelegate — can impersonate users to specific services.',
         category: 'kerberos',
         requiresOwned: false,
-        icon: 'ðŸ”’',
+        icon: '🔒',
         run(graph) {
             const edges    = graph.edges.filter(e => e.label === 'AllowedToDelegate');
             const sub      = edgeSubgraph(edges, graph);
             const accounts = [...new Set(edges.map(e => e.source))];
             const findings = [
                 `${accounts.length} principal(s) with constrained delegation on ${edges.length} service(s).`,
-                ...edges.slice(0, 8).map(e => `  â€¢ ${nameOf(graph, e.source)} â†’ ${nameOf(graph, e.target)}`),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                ...edges.slice(0, 8).map(e => `  • ${nameOf(graph, e.source)} → ${nameOf(graph, e.target)}`),
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: accounts.length };
         },
     },
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• ACL / OBJECT CONTROL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════ ACL / OBJECT CONTROL ══════════════════
 
     {
         id: 'acl-dcsync',
         name: 'DCSync Rights',
-        description: 'Principals with GetChangesAll on a Domain object â€” can dump ALL hashes via DRSUAPI.',
+        description: 'Principals with GetChangesAll on a Domain object — can dump ALL hashes via DRSUAPI.',
         category: 'acl',
         requiresOwned: false,
-        icon: 'ðŸ’¾',
+        icon: '💾',
         run(graph) {
             const allEdges    = graph.edges.filter(e => e.label === 'GetChanges' || e.label === 'GetChangesAll');
             const dcsyncSrcs  = new Set(
@@ -422,8 +431,8 @@ export const QUERIES: QueryDef[] = [
             const sub        = edgeSubgraph(allEdges, graph);
             const principals  = sub.nodes.filter(n => dcsyncSrcs.has(n.id));
             const findings = [
-                `âš ï¸ ${dcsyncSrcs.size} principal(s) can perform DCSync!`,
-                ...principals.slice(0, 8).map(n => `  â€¢ ${n.name} (${n.type})`),
+                `⚠️ ${dcsyncSrcs.size} principal(s) can perform DCSync!`,
+                ...principals.slice(0, 8).map(n => `  • ${n.name} (${n.type})`),
             ].filter(Boolean);
             return { subgraph: sub, findings, count: dcsyncSrcs.size };
         },
@@ -432,19 +441,19 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'acl-genericall',
         name: 'GenericAll / Full Control',
-        description: 'Principals with GenericAll on AD objects â€” complete control, many escalation paths.',
+        description: 'Principals with GenericAll on AD objects — complete control, many escalation paths.',
         category: 'acl',
         requiresOwned: false,
-        icon: 'ðŸ‘‘',
+        icon: '👑',
         run(graph) {
             const edges = graph.edges.filter(e => e.label === 'GenericAll');
             const sub   = edgeSubgraph(edges, graph);
             const findings = [
                 `${edges.length} GenericAll ACE(s) across ${sub.nodes.length} object(s).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} â†’ ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} → ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: edges.length };
         },
@@ -453,10 +462,10 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'acl-writable',
         name: 'WriteDACL / WriteOwner / Owns',
-        description: 'Principals that can modify ACLs or take ownership â€” re-ACL and escalate.',
+        description: 'Principals that can modify ACLs or take ownership — re-ACL and escalate.',
         category: 'acl',
         requiresOwned: false,
-        icon: 'âœï¸',
+        icon: '✏️',
         run(graph) {
             const WRITE = new Set(['WriteDACL', 'WriteOwner', 'Owns', 'GenericWrite', 'WriteAccountRestrictions']);
             const edges = graph.edges.filter(e => WRITE.has(e.label));
@@ -464,9 +473,9 @@ export const QUERIES: QueryDef[] = [
             const findings = [
                 `${edges.length} write/own ACE(s) across ${sub.nodes.length} object(s).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} â†’[${e.label}]â†’ ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} →[${e.label}]→ ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: edges.length };
         },
@@ -478,7 +487,7 @@ export const QUERIES: QueryDef[] = [
         description: 'Every attack-path-relevant edge: AdminTo, GenericAll/Write, WriteDACL, DCSync, LAPS, etc.',
         category: 'acl',
         requiresOwned: false,
-        icon: 'âš ï¸',
+        icon: '⚠️',
         run(graph) {
             const edges  = graph.edges.filter(e => DANGEROUS_EDGES.has(e.label));
             const sub    = edgeSubgraph(edges, graph);
@@ -488,7 +497,7 @@ export const QUERIES: QueryDef[] = [
                 `${edges.length} dangerous ACE(s) across ${sub.nodes.length} object(s).`,
                 ...Object.entries(byType)
                     .sort((a, b) => b[1] - a[1])
-                    .map(([k, v]) => `  â€¢ ${k}: ${v}`),
+                    .map(([k, v]) => `  • ${k}: ${v}`),
             ];
             return { subgraph: sub, findings, count: edges.length };
         },
@@ -500,16 +509,16 @@ export const QUERIES: QueryDef[] = [
         description: 'Principals that can read local admin passwords stored in LAPS.',
         category: 'acl',
         requiresOwned: false,
-        icon: 'ðŸ”',
+        icon: '🔐',
         run(graph) {
             const edges = graph.edges.filter(e => e.label === 'ReadLAPSPassword');
             const sub   = edgeSubgraph(edges, graph);
             const findings = [
                 `${edges.length} ReadLAPSPassword ACE(s).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} can read LAPS on ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} can read LAPS on ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: edges.length };
         },
@@ -521,16 +530,16 @@ export const QUERIES: QueryDef[] = [
         description: 'Principals authorised to retrieve a Group Managed Service Account password.',
         category: 'acl',
         requiresOwned: false,
-        icon: 'ðŸ—ï¸',
+        icon: '🗝️',
         run(graph) {
             const edges = graph.edges.filter(e => e.label === 'ReadGMSAPassword');
             const sub   = edgeSubgraph(edges, graph);
             const findings = [
                 `${edges.length} ReadGMSAPassword ACE(s).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} â†’ ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} → ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: edges.length };
         },
@@ -542,29 +551,29 @@ export const QUERIES: QueryDef[] = [
         description: 'All dangerous edges directly outbound from marked owned objects.',
         category: 'acl',
         requiresOwned: true,
-        icon: 'ðŸ•¹ï¸',
+        icon: '🕹️',
         run(graph, owned) {
             const edges = graph.edges.filter(e => owned.has(e.source) && DANGEROUS_EDGES.has(e.label));
             const sub   = edgeSubgraph(edges, graph);
             const findings = [
                 `Owned objects have ${edges.length} outbound dangerous edge(s).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} â†’[${e.label}]â†’ ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} →[${e.label}]→ ${nameOf(graph, e.target)}`
                 ),
             ].filter(Boolean);
             return { subgraph: sub, findings, count: edges.length };
         },
     },
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• DELEGATION â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════ DELEGATION ══════════════════
 
     {
         id: 'deleg-rbcd',
         name: 'RBCD Targets (AllowedToAct)',
-        description: 'Computers with msDS-AllowedToActOnBehalfOfOtherIdentity â€” RBCD abuse targets.',
+        description: 'Computers with msDS-AllowedToActOnBehalfOfOtherIdentity — RBCD abuse targets.',
         category: 'delegation',
         requiresOwned: false,
-        icon: 'ðŸŽ­',
+        icon: '🎭',
         run(graph) {
             const edges   = graph.edges.filter(e => e.label === 'AllowedToAct');
             const sub     = edgeSubgraph(edges, graph);
@@ -572,9 +581,9 @@ export const QUERIES: QueryDef[] = [
             const findings = [
                 `${targets.length} RBCD target computer(s), ${edges.length} AllowedToAct edge(s).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} can RBCD to ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} can RBCD to ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: targets.length };
         },
@@ -583,19 +592,19 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'deleg-sid-history',
         name: 'SID History',
-        description: 'Objects with foreign SID history â€” cross-domain privilege escalation vector.',
+        description: 'Objects with foreign SID history — cross-domain privilege escalation vector.',
         category: 'delegation',
         requiresOwned: false,
-        icon: 'ðŸ‘»',
+        icon: '👻',
         run(graph) {
             const edges = graph.edges.filter(e => e.label === 'HasSIDHistory');
             const sub   = edgeSubgraph(edges, graph);
             const findings = [
-                `${edges.length} HasSIDHistory edge(s) â€” potential SID-filtering bypass.`,
+                `${edges.length} HasSIDHistory edge(s) — potential SID-filtering bypass.`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} carries SID of ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} carries SID of ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: edges.length };
         },
@@ -604,25 +613,25 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'deleg-shadow-creds',
         name: 'Shadow Credentials (WriteAccountRestrictions)',
-        description: 'Principals that can write msDS-KeyCredentialLink â€” shadow credential attack.',
+        description: 'Principals that can write msDS-KeyCredentialLink — shadow credential attack.',
         category: 'delegation',
         requiresOwned: false,
-        icon: 'ðŸŒ‘',
+        icon: '🌑',
         run(graph) {
             const edges = graph.edges.filter(e => e.label === 'WriteAccountRestrictions');
             const sub   = edgeSubgraph(edges, graph);
             const findings = [
-                `${edges.length} WriteAccountRestrictions edge(s) â€” shadow credential candidates.`,
+                `${edges.length} WriteAccountRestrictions edge(s) — shadow credential candidates.`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} â†’ ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} → ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: edges.length };
         },
     },
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• HIGH VALUE â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════ HIGH VALUE ══════════════════
 
     {
         id: 'hv-da-members',
@@ -630,7 +639,7 @@ export const QUERIES: QueryDef[] = [
         description: 'Direct members of Domain Admins and Enterprise Admins groups.',
         category: 'highvalue',
         requiresOwned: false,
-        icon: 'ðŸ‘‘',
+        icon: '👑',
         run(graph) {
             const daGroupIds = new Set(
                 graph.nodes.filter(isDomainAdminNode).map(n => n.id)
@@ -640,8 +649,8 @@ export const QUERIES: QueryDef[] = [
             const members = sub.nodes.filter(n => !daGroupIds.has(n.id));
             const findings = [
                 `${members.length} direct member(s) of privileged admin group(s).`,
-                ...members.slice(0, 10).map(n => `  â€¢ ${n.name} (${n.type})`),
-                members.length > 10 ? `  â€¦ and ${members.length - 10} more` : '',
+                ...members.slice(0, 10).map(n => `  • ${n.name} (${n.type})`),
+                members.length > 10 ? `  … and ${members.length - 10} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: members.length };
         },
@@ -650,10 +659,10 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'hv-admin-count',
         name: 'AdminCount = 1 Objects',
-        description: 'Objects with adminCount=1 â€” were or are members of a privileged protected group.',
+        description: 'Objects with adminCount=1 — were or are members of a privileged protected group.',
         category: 'highvalue',
         requiresOwned: false,
-        icon: 'â­',
+        icon: '⭐',
         run(graph) {
             const nodes  = graph.nodes.filter(n =>
                 n.properties?.admincount === true || n.properties?.admincount === 1
@@ -663,7 +672,7 @@ export const QUERIES: QueryDef[] = [
             nodes.forEach(n => { byType[n.type] = (byType[n.type] ?? 0) + 1; });
             const findings = [
                 `${nodes.length} object(s) with adminCount=1.`,
-                ...Object.entries(byType).map(([t, c]) => `  â€¢ ${t}: ${c}`),
+                ...Object.entries(byType).map(([t, c]) => `  • ${t}: ${c}`),
             ];
             return { subgraph: sub, findings, count: nodes.length };
         },
@@ -672,10 +681,10 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'hv-local-admins',
         name: 'All Local Admin Rights',
-        description: 'Every AdminTo edge in the environment â€” full lateral movement surface.',
+        description: 'Every AdminTo edge in the environment — full lateral movement surface.',
         category: 'highvalue',
         requiresOwned: false,
-        icon: 'ðŸ”“',
+        icon: '🔓',
         run(graph) {
             const edges   = graph.edges.filter(e => e.label === 'AdminTo');
             const sub     = edgeSubgraph(edges, graph);
@@ -684,9 +693,9 @@ export const QUERIES: QueryDef[] = [
             const findings = [
                 `${admins.length} principal(s) with local admin on ${targets.length} computer(s).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} â†’ ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} → ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: edges.length };
         },
@@ -695,10 +704,10 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'hv-domain-trusts',
         name: 'Domain Trusts Map',
-        description: 'All inter-domain trust edges â€” cross-forest attack surface.',
+        description: 'All inter-domain trust edges — cross-forest attack surface.',
         category: 'highvalue',
         requiresOwned: false,
-        icon: 'ðŸŒ',
+        icon: '🌐',
         run(graph) {
             const TRUST = new Set(['TrustedBy', 'ParentChild', 'CrossLink', 'External', 'Forest', 'Inbound', 'Outbound']);
             const edges  = graph.edges.filter(e => {
@@ -710,9 +719,9 @@ export const QUERIES: QueryDef[] = [
             const findings = [
                 `${edges.length} domain trust/relationship edge(s) across ${sub.nodes.length} node(s).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} â€”[${e.label}]â†’ ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} —[${e.label}]→ ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: edges.length };
         },
@@ -721,10 +730,10 @@ export const QUERIES: QueryDef[] = [
     {
         id: 'hv-password-never-expires',
         name: 'Passwords Never Expire',
-        description: 'Enabled users whose password is set to never expire â€” persistent accounts.',
+        description: 'Enabled users whose password is set to never expire — persistent accounts.',
         category: 'highvalue',
         requiresOwned: false,
-        icon: 'ðŸ”“',
+        icon: '🔓',
         run(graph) {
             const nodes = graph.nodes.filter(n =>
                 n.type === 'User' &&
@@ -734,28 +743,28 @@ export const QUERIES: QueryDef[] = [
             const sub = nodeSubgraph(nodes, graph);
             const findings = [
                 `${nodes.length} enabled user(s) with passwords that never expire.`,
-                ...nodes.slice(0, 8).map(n => `  â€¢ ${n.name}`),
-                nodes.length > 8 ? `  â€¦ and ${nodes.length - 8} more` : '',
+                ...nodes.slice(0, 8).map(n => `  • ${n.name}`),
+                nodes.length > 8 ? `  … and ${nodes.length - 8} more` : '',
             ].filter(Boolean);
             return { subgraph: sub, findings, count: nodes.length };
         },
     },
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• ADCS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════ ADCS ══════════════════
 
-    // â”€â”€ Helper inner data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Helper inner data ──────────────────────────────────────────────────
     // Authentication EKU OIDs that make a cert template useful for auth attacks
     // (Client Authentication, Smart Card Logon, PKINIT, Any Purpose, sub-CA)
 
     {
         id: 'adcs-esc1',
-        name: 'ESC1 â€” Enrollee Supplies SAN',
+        name: 'ESC1 — Enrollee Supplies SAN',
         description:
             'Certificate templates where enrollers can supply a Subject Alternative Name (CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT). ' +
-            'Enroll with targetted UPN (e.g. Administrator) â†’ authenticate via PKINIT â†’ NT hash.',
+            'Enroll with targetted UPN (e.g. Administrator) → authenticate via PKINIT → NT hash.',
         category: 'adcs',
         requiresOwned: false,
-        icon: 'ðŸ“œ',
+        icon: '📜',
         run(graph) {
             // Auth EKU OIDs recognised by Windows for Kerberos / PKINIT
             const AUTH_EKUS = new Set([
@@ -810,17 +819,17 @@ export const QUERIES: QueryDef[] = [
             };
 
             const findings = [
-                `âš ï¸ ${vulnTemplates.length} ESC1-vulnerable template(s) â€” enrollee can supply SAN.`,
-                enrollers.length > 0 ? `   ${enrollers.length} principal(s) can enroll.` : '   No Enroll edges found â€” check ACEs manually.',
+                `⚠️ ${vulnTemplates.length} ESC1-vulnerable template(s) — enrollee can supply SAN.`,
+                enrollers.length > 0 ? `   ${enrollers.length} principal(s) can enroll.` : '   No Enroll edges found — check ACEs manually.',
                 '',
                 ...vulnTemplates.slice(0, 8).map(n => {
                     const published = publishedEdges.filter(e => e.source === n.id);
                     const caNames   = published.map(e => nameOf(graph, e.target)).join(', ');
                     const p = n.properties ?? {};
                     const ekuList: string[] = p.ekus ?? p.certificateapplicationpolicy ?? [];
-                    return `  â€¢ ${n.name}${caNames ? ` â†’ CA: ${caNames}` : ''}  EKUs: [${ekuList.join(', ') || 'Any'}]`;
+                    return `  • ${n.name}${caNames ? ` → CA: ${caNames}` : ''}  EKUs: [${ekuList.join(', ') || 'Any'}]`;
                 }),
-                vulnTemplates.length > 8 ? `  â€¦ and ${vulnTemplates.length - 8} more` : '',
+                vulnTemplates.length > 8 ? `  … and ${vulnTemplates.length - 8} more` : '',
                 '',
                 'Exploit (Certipy):',
                 '  certipy req -u USER@DOMAIN -p PASS -dc-ip DC -ca CA_NAME -template TEMPLATE -upn administrator@DOMAIN',
@@ -833,12 +842,12 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'adcs-esc2',
-        name: 'ESC2 â€” Any Purpose / No EKU',
+        name: 'ESC2 — Any Purpose / No EKU',
         description:
-            'Templates with the Any Purpose EKU or no EKU at all â€” can be used for client auth even if not explicitly listed.',
+            'Templates with the Any Purpose EKU or no EKU at all — can be used for client auth even if not explicitly listed.',
         category: 'adcs',
         requiresOwned: false,
-        icon: 'ðŸ“œ',
+        icon: '📜',
         run(graph) {
             const vulnTemplates = graph.nodes.filter(n => {
                 if (n.type !== 'CertTemplate') return false;
@@ -862,9 +871,9 @@ export const QUERIES: QueryDef[] = [
             const extra = vulnTemplates.filter(n => !sub.nodes.find(s => s.id === n.id));
 
             const findings = [
-                `${vulnTemplates.length} ESC2 template(s) â€” Any Purpose EKU or no EKU constraint.`,
-                ...vulnTemplates.slice(0, 8).map(n => `  â€¢ ${n.name}`),
-                vulnTemplates.length > 8 ? `  â€¦ and ${vulnTemplates.length - 8} more` : '',
+                `${vulnTemplates.length} ESC2 template(s) — Any Purpose EKU or no EKU constraint.`,
+                ...vulnTemplates.slice(0, 8).map(n => `  • ${n.name}`),
+                vulnTemplates.length > 8 ? `  … and ${vulnTemplates.length - 8} more` : '',
             ].filter(Boolean);
 
             return {
@@ -877,12 +886,12 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'adcs-esc3',
-        name: 'ESC3 â€” Enrollment Agent Templates',
+        name: 'ESC3 — Enrollment Agent Templates',
         description:
             'Templates with the Certificate Request Agent EKU. Lets an enrollee request certs ON BEHALF of any user in an ESC3-B template.',
         category: 'adcs',
         requiresOwned: false,
-        icon: 'ðŸ“œ',
+        icon: '📜',
         run(graph) {
             const CERT_REQUEST_AGENT = '1.3.6.1.4.1.311.20.2.1';
             const agentTemplates = graph.nodes.filter(n =>
@@ -900,9 +909,9 @@ export const QUERIES: QueryDef[] = [
             const extra = agentTemplates.filter(n => !sub.nodes.find(s => s.id === n.id));
 
             const findings = [
-                `${agentTemplates.length} ESC3 enrollment agent template(s) â€” Certificate Request Agent EKU.`,
-                ...agentTemplates.slice(0, 8).map(n => `  â€¢ ${n.name}`),
-                agentTemplates.length > 8 ? `  â€¦ and ${agentTemplates.length - 8} more` : '',
+                `${agentTemplates.length} ESC3 enrollment agent template(s) — Certificate Request Agent EKU.`,
+                ...agentTemplates.slice(0, 8).map(n => `  • ${n.name}`),
+                agentTemplates.length > 8 ? `  … and ${agentTemplates.length - 8} more` : '',
             ].filter(Boolean);
 
             return {
@@ -915,12 +924,12 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'adcs-esc4',
-        name: 'ESC4 â€” Writable Template ACEs',
+        name: 'ESC4 — Writable Template ACEs',
         description:
-            'Principals with write control (GenericAll, GenericWrite, WriteDACL, WriteOwner) on a CertTemplate â€” can reconfigure it into ESC1.',
+            'Principals with write control (GenericAll, GenericWrite, WriteDACL, WriteOwner) on a CertTemplate — can reconfigure it into ESC1.',
         category: 'adcs',
         requiresOwned: false,
-        icon: 'âœï¸',
+        icon: '✏️',
         run(graph) {
             const WRITE = new Set(['GenericAll', 'GenericWrite', 'WriteDACL', 'WriteOwner', 'Owns', 'WriteAccountRestrictions']);
             const edges = graph.edges.filter(e => {
@@ -932,11 +941,11 @@ export const QUERIES: QueryDef[] = [
             const templates = [...new Set(edges.map(e => e.target))];
 
             const findings = [
-                `${edges.length} write-ACE(s) on ${templates.length} CertTemplate(s) â€” ESC4 (template reconfiguration).`,
+                `${edges.length} write-ACE(s) on ${templates.length} CertTemplate(s) — ESC4 (template reconfiguration).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} â†’[${e.label}]â†’ ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} →[${e.label}]→ ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
                 '',
                 'Exploit (Certipy):',
                 '  certipy template -u USER@DOMAIN -p PASS -dc-ip DC -template TEMPLATE -save-old',
@@ -950,15 +959,15 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'adcs-esc6',
-        name: 'ESC6 â€” CA EDITF_ATTRIBUTESUBJECTALTNAME2',
+        name: 'ESC6 — CA EDITF_ATTRIBUTESUBJECTALTNAME2',
         description:
             '[Requires SharpHound CE / Certipy data] EDITF_ATTRIBUTESUBJECTALTNAME2 is a CA registry flag ' +
             '(not in LDAP). SharpHound CE reads it via ICertAdminD2 RPC. ' +
             'If flag is set, any template on that CA can have attacker-supplied SAN. ' +
-            'Use â€œcertipy find -vulnerableâ€ or â€œCertify.exe casâ€ to enumerate manually.',
+            'Use “certipy find -vulnerable” or “Certify.exe cas” to enumerate manually.',
         category: 'adcs',
         requiresOwned: false,
-        icon: 'ðŸ­',
+        icon: '🏭',
         run(graph) {
             const caNodes = graph.nodes.filter(n =>
                 n.type === 'EnterpriseCA' || n.type === 'ADCSCA' || n.type === 'CA'
@@ -1008,8 +1017,8 @@ export const QUERIES: QueryDef[] = [
             );
 
             const findings = [
-                `âš ï¸ ${vulnCAs.length} CA(s) with EDITF_ATTRIBUTESUBJECTALTNAME2 (ESC6) â€” ANY template becomes ESC1.`,
-                ...vulnCAs.slice(0, 5).map(n => `  â€¢ ${n.name}`),
+                `⚠️ ${vulnCAs.length} CA(s) with EDITF_ATTRIBUTESUBJECTALTNAME2 (ESC6) — ANY template becomes ESC1.`,
+                ...vulnCAs.slice(0, 5).map(n => `  • ${n.name}`),
                 '',
                 `  ${publishEdges.length} template(s) published to vulnerable CA(s).`,
                 `  ${[...new Set(enrollEdges.map(e => e.source))].length} principal(s) with Enroll rights on those templates.`,
@@ -1030,21 +1039,21 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'adcs-esc7',
-        name: 'ESC7 â€” CA Officer / Manager ACE',
+        name: 'ESC7 — CA Officer / Manager ACE',
         description:
             '[Requires SharpHound CE / Certipy data] ManageCA and ManageCertificates are CA-internal ' +
             'security roles stored in the CA registry, NOT the AD object nTSecurityDescriptor. ' +
             'Only detectable via RPC (ICertAdminD). SharpHound CE populates these; pure LDAP collectors cannot.',
         category: 'adcs',
         requiresOwned: false,
-        icon: 'ðŸ›ï¸',
+        icon: '🏛️',
         run(graph) {
             const MANAGE  = new Set(['ManageCertificates', 'ManageCA', 'GenericAll']);
             const caNodes = graph.nodes.filter(n =>
                 n.type === 'EnterpriseCA' || n.type === 'ADCSCA' || n.type === 'CA'
             );
-            // ManageCA/ManageCertificates are CA internal security roles stored in the CAâ€™s
-            // registry security descriptor â€” NOT in the AD object nTSecurityDescriptor.
+            // ManageCA/ManageCertificates are CA internal security roles stored in the CA’s
+            // registry security descriptor — NOT in the AD object nTSecurityDescriptor.
             // SharpHound CE collects them via RPC; pure LDAP collectors cannot see them.
             // We can detect them if SharpHound CE populated manageca/managecertificates
             // properties, or if explicit ManageCA/ManageCertificates edges exist.
@@ -1058,10 +1067,10 @@ export const QUERIES: QueryDef[] = [
 
             if (!hasRpcEdges && !hasRpcProps) {
                 const noDataFindings = [
-                    'âŒ ESC7 cannot be detected from pure LDAP / SharpHound data.',
+                    '❌ ESC7 cannot be detected from pure LDAP / SharpHound data.',
                     '',
                     'ManageCA and ManageCertificates are CA-internal security roles stored',
-                    'in the CAâ€™s own registry security descriptor â€” NOT the AD object ACL.',
+                    'in the CA’s own registry security descriptor — NOT the AD object ACL.',
                     'They require RPC to the CA to enumerate (ICertAdminD interface).',
                     '',
                     caNodes.length > 0
@@ -1085,9 +1094,9 @@ export const QUERIES: QueryDef[] = [
             const findings = [
                 `${edges.length} management ACE(s) on Enterprise CA(s) (ESC7).`,
                 ...edges.slice(0, 8).map(e =>
-                    `  â€¢ ${nameOf(graph, e.source)} â†’[${e.label}]â†’ ${nameOf(graph, e.target)}`
+                    `  • ${nameOf(graph, e.source)} →[${e.label}]→ ${nameOf(graph, e.target)}`
                 ),
-                edges.length > 8 ? `  â€¦ and ${edges.length - 8} more` : '',
+                edges.length > 8 ? `  … and ${edges.length - 8} more` : '',
             ].filter(Boolean);
 
             return { subgraph: sub, findings, count: edges.length };
@@ -1096,15 +1105,15 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'adcs-esc8',
-        name: 'ESC8 â€” HTTP Web Enrollment Relay',
+        name: 'ESC8 — HTTP Web Enrollment Relay',
         description:
             '[Requires SharpHound CE / Certipy data] Whether HTTP (not HTTPS) web enrollment is active ' +
-            'on a CA cannot be determined from LDAP alone â€” it requires an HTTP probe or RPC call to the CA. ' +
+            'on a CA cannot be determined from LDAP alone — it requires an HTTP probe or RPC call to the CA. ' +
             'SharpHound CE sets webenrollmenthttps=false when it detects plain HTTP. ' +
-            'If your data came from a pure LDAP collector, this queryâ€™s results will be unreliable.',
+            'If your data came from a pure LDAP collector, this query’s results will be unreliable.',
         category: 'adcs',
         requiresOwned: false,
-        icon: 'ðŸŒ',
+        icon: '🌐',
         run(graph) {
             const caNodes = graph.nodes.filter(n =>
                 n.type === 'EnterpriseCA' || n.type === 'ADCSCA' || n.type === 'CA'
@@ -1161,12 +1170,12 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'adcs-enroll-high-priv',
-        name: 'Enroll Rights on Templates â†’ DA',
+        name: 'Enroll Rights on Templates → DA',
         description:
-            'Shortest paths from principals with template Enroll rights to Domain Admins â€” find who can abuse any ADCS template for escalation.',
+            'Shortest paths from principals with template Enroll rights to Domain Admins — find who can abuse any ADCS template for escalation.',
         category: 'adcs',
         requiresOwned: false,
-        icon: 'ðŸ“œâ†’ðŸŽ¯',
+        icon: '📜→🎯',
         run(graph) {
             const enrollerIds = new Set(
                 graph.edges
@@ -1178,7 +1187,7 @@ export const QUERIES: QueryDef[] = [
 
             const findings = subgraph.nodes.length > 0
                 ? [
-                    `Found path(s) from ${enrollerIds.size} principal(s) with Enroll rights to Domain Admins â€” ${subgraph.edges.length} edges.`,
+                    `Found path(s) from ${enrollerIds.size} principal(s) with Enroll rights to Domain Admins — ${subgraph.edges.length} edges.`,
                     'Investigate Enroll + ESC1/ESC2/ESC3 chains for privilege escalation.',
                 ]
                 : ['No direct BFS path from Enroll holders to Domain Admins found.'];
@@ -1189,12 +1198,12 @@ export const QUERIES: QueryDef[] = [
 
     {
         id: 'adcs-owned-to-esc1',
-        name: 'Owned â†’ ESC1 Template',
+        name: 'Owned → ESC1 Template',
         description:
             'Can owned principals enroll in an ESC1 vulnerable template right now?',
         category: 'adcs',
         requiresOwned: true,
-        icon: 'ðŸ´â†’ðŸ“œ',
+        icon: '🏴→📜',
         run(graph, owned) {
             const AUTH_EKUS = new Set([
                 '1.3.6.1.5.5.7.3.2', '1.3.6.1.4.1.311.20.2.2',
@@ -1224,9 +1233,9 @@ export const QUERIES: QueryDef[] = [
 
             const findings = edges.length > 0
                 ? [
-                    `âœ… ${edges.length} owned object(s) can directly enroll in ${[...new Set(edges.map(e => e.target))].length} ESC1 template(s)!`,
+                    `✅ ${edges.length} owned object(s) can directly enroll in ${[...new Set(edges.map(e => e.target))].length} ESC1 template(s)!`,
                     ...edges.slice(0, 6).map(e =>
-                        `  â€¢ ${nameOf(graph, e.source)} â†’[${e.label}]â†’ ${nameOf(graph, e.target)}`
+                        `  • ${nameOf(graph, e.source)} →[${e.label}]→ ${nameOf(graph, e.target)}`
                     ),
                 ]
                 : ['No owned object has direct Enroll rights on ESC1-vulnerable templates.'];
@@ -1236,13 +1245,13 @@ export const QUERIES: QueryDef[] = [
     },
 ];
 
-// â”€â”€ Category metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Category metadata ─────────────────────────────────────────────────────────
 
 export const QUERY_CATEGORIES: { id: QueryCategory; label: string; icon: string }[] = [
-    { id: 'paths',      label: 'Attack Paths',  icon: 'ðŸŽ¯' },
-    { id: 'kerberos',   label: 'Kerberos',       icon: 'ðŸ”‘' },
-    { id: 'acl',        label: 'ACL / Control',  icon: 'âš ï¸' },
-    { id: 'delegation', label: 'Delegation',     icon: 'ðŸŽ­' },
-    { id: 'highvalue',  label: 'High Value',     icon: 'ðŸ‘‘' },
-    { id: 'adcs',       label: 'ADCS / ESC',     icon: 'ðŸ“œ' },
+    { id: 'paths',      label: 'Attack Paths',  icon: '🎯' },
+    { id: 'kerberos',   label: 'Kerberos',       icon: '🔑' },
+    { id: 'acl',        label: 'ACL / Control',  icon: '⚠️' },
+    { id: 'delegation', label: 'Delegation',     icon: '🎭' },
+    { id: 'highvalue',  label: 'High Value',     icon: '👑' },
+    { id: 'adcs',       label: 'ADCS / ESC',     icon: '📜' },
 ];

@@ -908,7 +908,81 @@ label input, label textarea, label select { margin-top: .1rem; }
 }
 .bh-paste:focus { outline: none; border-color: var(--blue); }
 
-/* ── BloodHound view toggle (Graph / List) ──────────────────────────────────── */
+/* ── BloodHound workspace (new side-by-side layout) ────────────────────────── */
+.bh-parsing-notice {
+  color: var(--text-dim);
+  font-size: .9em;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+/* Stats/action bar */
+.bh-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.bh-stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.bh-stats-pills { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+.bh-stats-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.bh-fullgraph-btn { border-color: #f0883e88 !important; color: #f0883e !important; }
+.bh-fullgraph-btn.active { background: #f0883e22 !important; }
+
+/* Node list (collapsible) */
+.bh-virtual-list { display: flex; flex-direction: column; gap: 6px; }
+.bh-load-more {
+  align-self: flex-start;
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.bh-load-more-dim { color: var(--text-dim); font-size: .8em; }
+
+/* Main two-column grid */
+.bh-main-grid {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 12px;
+  min-height: 620px;
+}
+.bh-left-panel {
+  overflow-y: auto;
+  min-height: 0;
+}
+.bh-right-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Graph placeholder */
+.bh-graph-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  text-align: center;
+  padding: 40px 24px;
+}
+.bh-placeholder-icon { font-size: 2.5rem; opacity: .35; }
+.bh-placeholder-text { font-size: .92em; color: var(--text-dim); margin: 0; }
+.bh-placeholder-sub  { font-size: .8em;  color: var(--text-dim); margin: 0; opacity: .7; }
+
+/* Keep the old view-toggle styles for any legacy refs */
 .bh-view-toggle {
   display: flex;
   gap: 4px;
@@ -937,7 +1011,7 @@ label input, label textarea, label select { margin-top: .1rem; }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 8px;
+  height: 100%;
 }
 
 .bh-graph-toolbar {
@@ -964,6 +1038,7 @@ label input, label textarea, label select { margin-top: .1rem; }
 
 .bh-graph-filters { display: flex; align-items: center; gap: 5px; }
 .bh-filter-label { color: var(--text-dim); font-size: .8em; white-space: nowrap; }
+.bh-filter-warn  { color: #f0883e; font-size: .75em; }
 
 .bh-filter-btn {
   padding: 3px 10px;
@@ -981,7 +1056,8 @@ label input, label textarea, label select { margin-top: .1rem; }
 
 .bh-graph-body {
   display: flex;
-  height: 580px;
+  flex: 1;
+  min-height: 400px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
@@ -1128,10 +1204,11 @@ label input, label textarea, label select { margin-top: .1rem; }
   vertical-align: middle;
 }
 
-/* ── Compact graph variant ────────────────────────────────────────────────── */
+/* ── Compact graph variant (inside right panel it fills available height) ── */
+.bh-graph-compact { height: 100%; }
 .bh-graph-compact .bh-graph-body,
 .bh-graph-body-compact {
-  height: 380px !important;
+  min-height: 360px;
 }
 
 /* ── BloodHound Queries panel ─────────────────────────────────────────────── */
@@ -1139,7 +1216,6 @@ label input, label textarea, label select { margin-top: .1rem; }
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 8px;
 }
 
 /* Owned panel */

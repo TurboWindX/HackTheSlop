@@ -75,7 +75,7 @@ const BloodHoundGraph: React.FC<Props> = ({ graph, ownedIds = new Set(), onToggl
     const [dims, setDims]             = useState({ width: 900, height: 560 });
     const [selectedNode, setSelected] = useState<BHGraphNode | null>(null);
     const [filterMode, setFilterMode] = useState<FilterMode>('dangerous');
-    const [maxNodes, setMaxNodes]     = useState(600);
+    const [maxNodes, setMaxNodes]     = useState(500);
 
     // which edge-type checkboxes are ticked
     const [enabledEdges, setEnabledEdges] = useState<Set<string>>(() => {
@@ -248,11 +248,14 @@ const BloodHoundGraph: React.FC<Props> = ({ graph, ownedIds = new Set(), onToggl
                 <div className="bh-graph-filters">
                     <span className="bh-filter-label">Max nodes:</span>
                     <input
-                        type="range" min={50} max={2000} step={50}
+                        type="range" min={50} max={1500} step={50}
                         value={maxNodes}
                         onChange={e => setMaxNodes(Number(e.target.value))}
                     />
                     <span className="bh-filter-label">{maxNodes}</span>
+                    {maxNodes > 800 && (
+                        <span className="bh-filter-warn">⚠ may be slow</span>
+                    )}
                 </div>
             </div>
 
@@ -312,6 +315,14 @@ const BloodHoundGraph: React.FC<Props> = ({ graph, ownedIds = new Set(), onToggl
                             onNodeClick={handleNodeClick}
                             onNodeRightClick={handleNodeRightClick}
                             backgroundColor="#0d1117"
+                            // Physics sim tuning — stops sooner so the page doesn't stutter
+                            warmupTicks={graphData.nodes.length > 300 ? 30 : 60}
+                            cooldownTicks={graphData.nodes.length > 500 ? 80 : 200}
+                            cooldownTime={8000}
+                            d3AlphaDecay={graphData.nodes.length > 300 ? 0.05 : 0.03}
+                            d3VelocityDecay={0.4}
+                            // Disable dragging when the graph is huge (each drag tick is expensive)
+                            enableNodeDrag={graphData.nodes.length <= 600}
                         />
                     )}
                 </div>

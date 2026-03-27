@@ -94,9 +94,34 @@ function inferType(obj: any): string {
     return 'User';
 }
 
+/** Only store a small set of key properties per node to cap memory usage. */
+function pickProperties(props: Record<string, any> | undefined): Record<string, any> | undefined {
+    if (!props) return undefined;
+    const KEEP = [
+        'name', 'enabled', 'admincount', 'hasspn', 'dontreqpreauth',
+        'description', 'highvalue', 'unconstraineddelegation',
+        'pwdlastset', 'lastlogon', 'operatingsystem', 'gpcpath',
+    ];
+    const out: Record<string, any> = {};
+    for (const k of KEEP) {
+        if (props[k] !== undefined && props[k] !== null && props[k] !== false) out[k] = props[k];
+    }
+    return Object.keys(out).length ? out : undefined;
+}
+
 function extractGraphFromItems(items: any[]): BHGraph {
     const nodesMap = new Map<string, BHGraphNode>();
+    const edgeSet  = new Set<string>();
     const edges: BHGraphEdge[] = [];
+
+    function addEdge(source: string, target: string, label: string) {
+        if (!source || !target || source === target) return;
+        const key = `${source}\x00${target}\x00${label}`;
+        if (!edgeSet.has(key)) {
+            edgeSet.add(key);
+            edges.push({ source, target, label });
+        }
+    }
 
     for (const obj of items) {
         const id = obj.ObjectIdentifier ?? obj.objectid;
@@ -104,13 +129,13 @@ function extractGraphFromItems(items: any[]): BHGraph {
 
         const type = obj._bhType ? bhTypeToKind(obj._bhType) : inferType(obj);
         const name = obj.Properties?.name ?? obj.name ?? id;
-        nodesMap.set(id, { id, name, type, properties: obj.Properties });
+        nodesMap.set(id, { id, name, type, properties: pickProperties(obj.Properties) });
 
         // Group membership
         if (Array.isArray(obj.Members)) {
             for (const m of obj.Members) {
                 const mId = m.ObjectIdentifier ?? m.objectid;
-                if (mId) edges.push({ source: mId, target: id, label: 'MemberOf' });
+                addEdge(mId, id, 'MemberOf');
             }
         }
 
@@ -118,8 +143,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(obj.Aces)) {
             for (const ace of obj.Aces) {
                 const src = ace.PrincipalSID ?? ace.PrincipalName;
-                if (src && ace.RightName)
-                    edges.push({ source: src, target: id, label: ace.RightName });
+                if (src && ace.RightName) addEdge(src, id, ace.RightName);
             }
         }
 
@@ -128,7 +152,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(localAdmins)) {
             for (const m of localAdmins) {
                 const mId = m.ObjectIdentifier ?? m.objectid;
-                if (mId) edges.push({ source: mId, target: id, label: 'AdminTo' });
+                addEdge(mId, id, 'AdminTo');
             }
         }
 
@@ -137,7 +161,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(sessions)) {
             for (const s of sessions) {
                 const uId = s.UserSID ?? s.ObjectIdentifier;
-                if (uId) edges.push({ source: uId, target: id, label: 'HasSession' });
+                addEdge(uId, id, 'HasSession');
             }
         }
 
@@ -146,7 +170,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(rdp)) {
             for (const m of rdp) {
                 const mId = m.ObjectIdentifier ?? m.objectid;
-                if (mId) edges.push({ source: mId, target: id, label: 'CanRDP' });
+                addEdge(mId, id, 'CanRDP');
             }
         }
 
@@ -155,7 +179,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(psrem)) {
             for (const m of psrem) {
                 const mId = m.ObjectIdentifier ?? m.objectid;
-                if (mId) edges.push({ source: mId, target: id, label: 'CanPSRemote' });
+                addEdge(mId, id, 'CanPSRemote');
             }
         }
 
@@ -164,7 +188,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(dcom)) {
             for (const m of dcom) {
                 const mId = m.ObjectIdentifier ?? m.objectid;
-                if (mId) edges.push({ source: mId, target: id, label: 'ExecuteDCOM' });
+                addEdge(mId, id, 'ExecuteDCOM');
             }
         }
 
@@ -172,7 +196,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(obj.AllowedToAct)) {
             for (const m of obj.AllowedToAct) {
                 const mId = m.ObjectIdentifier ?? m.objectid;
-                if (mId) edges.push({ source: mId, target: id, label: 'AllowedToAct' });
+                addEdge(mId, id, 'AllowedToAct');
             }
         }
 
@@ -180,7 +204,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(obj.AllowedToDelegate)) {
             for (const m of obj.AllowedToDelegate) {
                 const mId = m.ObjectIdentifier ?? m.objectid;
-                if (mId) edges.push({ source: id, target: mId, label: 'AllowedToDelegate' });
+                addEdge(id, mId, 'AllowedToDelegate');
             }
         }
 
@@ -188,7 +212,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(obj.HasSIDHistory)) {
             for (const m of obj.HasSIDHistory) {
                 const mId = m.ObjectIdentifier ?? m.objectid;
-                if (mId) edges.push({ source: id, target: mId, label: 'HasSIDHistory' });
+                addEdge(id, mId, 'HasSIDHistory');
             }
         }
 
@@ -196,7 +220,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(obj.Trusts)) {
             for (const t of obj.Trusts) {
                 if (t.TargetDomainSid)
-                    edges.push({ source: id, target: t.TargetDomainSid, label: t.TrustType ?? 'TrustedBy' });
+                    addEdge(id, t.TargetDomainSid, t.TrustType ?? 'TrustedBy');
             }
         }
 
@@ -208,7 +232,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(certTemplates)) {
             for (const t of certTemplates) {
                 const tId = t.ObjectIdentifier ?? t.objectid ?? (typeof t === 'string' ? t : null);
-                if (tId) edges.push({ source: tId, target: id, label: 'PublishedTo' });
+                addEdge(tId, id, 'PublishedTo');
             }
         }
 
@@ -218,7 +242,7 @@ function extractGraphFromItems(items: any[]): BHGraph {
         if (Array.isArray(enrollRights)) {
             for (const e of enrollRights) {
                 const eId = e.ObjectIdentifier ?? e.objectid;
-                if (eId) edges.push({ source: eId, target: id, label: 'Enroll' });
+                addEdge(eId, id, 'Enroll');
             }
         }
 
@@ -227,15 +251,14 @@ function extractGraphFromItems(items: any[]): BHGraph {
     }
 
     // Stub nodes referenced in edges but never seen as a primary object
-    const allEdges = edges.filter(e => e.source && e.target && e.source !== e.target);
-    for (const e of allEdges) {
+    for (const e of edges) {
         if (!nodesMap.has(e.source))
             nodesMap.set(e.source, { id: e.source, name: e.source.slice(-12), type: 'Unknown' });
         if (!nodesMap.has(e.target))
             nodesMap.set(e.target, { id: e.target, name: e.target.slice(-12), type: 'Unknown' });
     }
 
-    return { nodes: Array.from(nodesMap.values()), edges: allEdges };
+    return { nodes: Array.from(nodesMap.values()), edges };
 }
 
 // ── Legacy flat-list parser (AI context / list view) ─────────────────────────

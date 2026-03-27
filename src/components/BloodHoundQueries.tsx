@@ -1,20 +1,32 @@
 import React, { useState, useMemo } from 'react';
-import { QUERIES, QUERY_CATEGORIES, QueryDef, QueryResult, QueryCategory } from '../utils/graphQueries';
+import { QUERIES, QUERY_CATEGORIES, QueryDef, QueryCategory } from '../utils/graphQueries';
 import { BHGraph } from '../services/bloodhoundParser';
-import BloodHoundGraph from './BloodHoundGraph';
 
 interface Props {
     graph: BHGraph;
     ownedIds: Set<string>;
     onToggleOwned: (id: string) => void;
+    /** Called whenever a query is run; the parent renders the resulting subgraph. */
+    onSubgraph: (subgraph: BHGraph, findings: string[], count: number) => void;
 }
 
-const BloodHoundQueries: React.FC<Props> = ({ graph, ownedIds, onToggleOwned }) => {
+const BloodHoundQueries: React.FC<Props> = ({ graph, ownedIds, onToggleOwned, onSubgraph }) => {
     const [activeCategory, setActiveCategory] = useState<QueryCategory>('paths');
     const [activeQueryId,  setActiveQueryId]  = useState<string | null>(null);
-    const [result,         setResult]         = useState<QueryResult | null>(null);
+    const [findings,       setFindings]       = useState<string[]>([]);
+    const [resultCount,    setResultCount]    = useState<number | null>(null);
     const [ownedInput,     setOwnedInput]     = useState('');
     const [ownedOpen,      setOwnedOpen]      = useState(true);
+
+    // O(1) lookup maps built once per graph change instead of linear find() calls
+    const nodeByName = useMemo(
+        () => new Map(graph.nodes.map(n => [n.name.toLowerCase(), n])),
+        [graph.nodes],
+    );
+    const nodeById = useMemo(
+        () => new Map(graph.nodes.map(n => [n.id.toLowerCase(), n])),
+        [graph.nodes],
+    );
 
     const visibleQueries = useMemo(
         () => QUERIES.filter(q => q.category === activeCategory),
@@ -22,8 +34,11 @@ const BloodHoundQueries: React.FC<Props> = ({ graph, ownedIds, onToggleOwned }) 
     );
 
     const runQuery = (q: QueryDef) => {
+        const r = q.run(graph, ownedIds);
         setActiveQueryId(q.id);
-        setResult(q.run(graph, ownedIds));
+        setFindings(r.findings);
+        setResultCount(r.count);
+        onSubgraph(r.subgraph, r.findings, r.count);
     };
 
     const addOwned = () => {
@@ -33,18 +48,21 @@ const BloodHoundQueries: React.FC<Props> = ({ graph, ownedIds, onToggleOwned }) 
             .filter(Boolean);
 
         for (const line of lines) {
-            const matched = graph.nodes.find(
-                n =>
-                    n.name.toLowerCase() === line.toLowerCase() ||
-                    n.id.toLowerCase()   === line.toLowerCase()  ||
-                    n.id.toUpperCase().includes(line.toUpperCase()) // partial SID match
-            );
+            const key = line.toLowerCase();
+            const matched =
+                nodeByName.get(key) ??
+                nodeById.get(key) ??
+                // Partial SID suffix fallback (only if the above exact lookups missed)
+                graph.nodes.find(n => n.id.toLowerCase().includes(key));
             if (matched) onToggleOwned(matched.id);
         }
         setOwnedInput('');
     };
 
-    const ownedNodes = graph.nodes.filter(n => ownedIds.has(n.id));
+    const ownedNodes = useMemo(
+        () => graph.nodes.filter(n => ownedIds.has(n.id)),
+        [graph.nodes, ownedIds],
+    );
 
     return (
         <div className="bh-queries-wrap">
@@ -112,7 +130,7 @@ const BloodHoundQueries: React.FC<Props> = ({ graph, ownedIds, onToggleOwned }) 
                         <button
                             key={cat.id}
                             className={`bh-cat-btn${activeCategory === cat.id ? ' active' : ''}`}
-                            onClick={() => { setActiveCategory(cat.id); setResult(null); setActiveQueryId(null); }}
+                            onClick={() => { setActiveCategory(cat.id); setFindings([]); setResultCount(null); setActiveQueryId(null); }}
                         >
                             <span className="bh-cat-icon">{cat.icon}</span>
                             <span className="bh-cat-label">{cat.label}</span>
@@ -150,11 +168,11 @@ const BloodHoundQueries: React.FC<Props> = ({ graph, ownedIds, onToggleOwned }) 
                         })}
                     </div>
 
-                    {/* Result panel */}
-                    {result && (
+                    {/* Findings — shown below query list, graph goes in parent's right panel */}
+                    {findings.length > 0 && (
                         <div className="bh-query-result">
-                            <div className={`bh-result-findings${result.count === 0 ? ' bh-result-empty' : ''}`}>
-                                {result.findings.map((line, i) => (
+                            <div className={`bh-result-findings${resultCount === 0 ? ' bh-result-empty' : ''}`}>
+                                {findings.map((line, i) => (
                                     <p
                                         key={i}
                                         className={line.startsWith('  ') ? 'bh-find-sub' : 'bh-find-main'}
@@ -163,17 +181,6 @@ const BloodHoundQueries: React.FC<Props> = ({ graph, ownedIds, onToggleOwned }) 
                                     </p>
                                 ))}
                             </div>
-
-                            {result.subgraph.nodes.length > 0 ? (
-                                <BloodHoundGraph
-                                    graph={result.subgraph}
-                                    ownedIds={ownedIds}
-                                    onToggleOwned={onToggleOwned}
-                                    compact
-                                />
-                            ) : (
-                                <div className="bh-query-noresult">No matching objects found.</div>
-                            )}
                         </div>
                     )}
                 </div>

@@ -10,10 +10,18 @@ import JSZip from 'jszip';
 
 // ── BloodHound tab — ZIP upload + JSON paste ─────────────────────────────────
 const BloodHoundTab: React.FC<{ onJsonParsed: (json: string) => void }> = ({ onJsonParsed }) => {
-    const [rawJson, setRawJson] = useState('');
-    const [status, setStatus]   = useState('');
-    const [error, setError]     = useState('');
+    const [status, setStatus] = useState('');
+    const [error, setError]   = useState('');
+    // Keep parsed JSON ref so BloodhoundAnalyzer can keep its state on re-renders
+    const [parsedJson, setParsedJson] = useState('');
     const fileRef = useRef<HTMLInputElement>(null);
+
+    const accept = (json: string, msg: string) => {
+        setParsedJson(json);
+        onJsonParsed(json);
+        setStatus(msg);
+        setError('');
+    };
 
     const handleZip = async (file: File) => {
         setError('');
@@ -28,7 +36,6 @@ const BloodHoundTab: React.FC<{ onJsonParsed: (json: string) => void }> = ({ onJ
                 const text = await f.async('string');
                 try {
                     const parsed = JSON.parse(text);
-                    // BloodHound CE: each file has { data: [...], meta: { type: 'users', … } }
                     if (parsed.data && Array.isArray(parsed.data)) {
                         const bhType = parsed.meta?.type ?? '';
                         parts.push(...parsed.data.map((o: any) => ({ ...o, _bhType: bhType })));
@@ -41,10 +48,11 @@ const BloodHoundTab: React.FC<{ onJsonParsed: (json: string) => void }> = ({ onJ
             });
 
             await Promise.all(jobs);
-            const merged = JSON.stringify(parts);
-            setRawJson(merged);
-            onJsonParsed(merged);
-            setStatus(`✓ Loaded ${parts.length} objects from ${Object.keys(zip.files).filter(n => n.endsWith('.json')).length} JSON files`);
+            const jsonCount = Object.keys(zip.files).filter(n => n.endsWith('.json')).length;
+            accept(
+                JSON.stringify(parts),
+                `✓ Loaded ${parts.length} objects from ${jsonCount} JSON files`
+            );
         } catch (e: any) {
             setError('Failed to read ZIP: ' + e.message);
             setStatus('');
@@ -59,22 +67,12 @@ const BloodHoundTab: React.FC<{ onJsonParsed: (json: string) => void }> = ({ onJ
         } else if (f.name.endsWith('.json')) {
             const reader = new FileReader();
             reader.onload = ev => {
-                const text = ev.target?.result as string ?? '';
-                setRawJson(text);
-                onJsonParsed(text);
-                setStatus('✓ JSON file loaded');
+                accept(ev.target?.result as string ?? '', '✓ JSON file loaded');
             };
             reader.readAsText(f);
         } else {
             setError('Please upload a .zip or .json file');
         }
-    };
-
-    const handlePaste = (text: string) => {
-        setRawJson(text);
-        onJsonParsed(text);
-        setStatus('');
-        setError('');
     };
 
     return (
@@ -98,17 +96,16 @@ const BloodHoundTab: React.FC<{ onJsonParsed: (json: string) => void }> = ({ onJ
 
             <label className="bh-paste-label">
                 Or paste raw BloodHound JSON:
+                {/* Uncontrolled — avoids React re-rendering with megabytes of JSON text */}
                 <textarea
                     className="bh-paste"
                     rows={6}
-                    value={rawJson}
-                    onChange={e => handlePaste(e.target.value)}
+                    onChange={e => accept(e.target.value, '')}
                     placeholder='{"nodes": [...]} or raw array'
                 />
             </label>
 
-            {/* Pass raw JSON so the analyzer can render both the graph and the node list */}
-            <BloodhoundAnalyzer results={rawJson} />
+            <BloodhoundAnalyzer results={parsedJson} />
         </div>
     );
 };
@@ -187,9 +184,10 @@ const Dashboard: React.FC = () => {
                     <GuidanceChat engagement={engagement} bloodhoundJson={bloodhoundJson} />
                 )}
 
-                {activeTab === 'bloodhound' && (
+                {/* Always mounted so parsed graph data survives tab switches */}
+                <div style={{ display: activeTab === 'bloodhound' ? '' : 'none' }}>
                     <BloodHoundTab onJsonParsed={setBloodhoundJson} />
-                )}
+                </div>
 
                 {activeTab === 'commands' && (
                     <CommandSuggester bloodhoundData={bloodhoundJson} userNotes={engagement?.notes ?? ''} engagement={engagement} />
